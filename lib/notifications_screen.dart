@@ -1,3 +1,4 @@
+import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart'; // 👈 مهم جداً!
 
@@ -98,7 +99,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           // العنوان
           Text(
-            'الإشعارات',
+            context.tr.notifications,
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -129,7 +130,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         children: [
           // غير مقروءة
           _buildTabButton(
-            title: 'غير مقروءة',
+            title: context.tr.unread,
             isSelected: _selectedTab == 1,
             onTap: () {
               setState(() {
@@ -141,7 +142,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           const SizedBox(width: 12),
           // الكل
           _buildTabButton(
-            title: 'الكل',
+            title: context.tr.allNotifications,
             isSelected: _selectedTab == 0,
             onTap: () {
               setState(() {
@@ -398,7 +399,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            _selectedTab == 0 ? 'لا توجد إشعارات' : 'لا توجد إشعارات غير مقروءة',
+            _selectedTab == 0 ? context.tr.noNotifications : context.tr.noUnreadNotifications,
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey.shade500,
@@ -438,10 +439,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   _markAllAsRead();
                 },
                 trailing: const Icon(Icons.done_all, color: Color(0xFF379777)),
-                title: const Text(
-                  'تحديد الكل كمقروء',
+                title: Text(
+                  context.tr.markAllRead,
                   textAlign: TextAlign.right,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF379777),

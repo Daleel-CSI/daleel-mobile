@@ -16,7 +16,7 @@
 
 // مثال عملي على settings_screen.dart بعد التحويل:
 
-import 'package:daleel/l10n/app_localizations.dart';  // ← أضف الـ import ده
+import 'package:daleel/core/l10n/app_localizations.dart';  // ← أضف الـ import ده
 import 'package:daleel/providers/locale_provider.dart';
 import 'package:daleel/providers/theme_provider.dart';
 import 'package:flutter/material.dart';

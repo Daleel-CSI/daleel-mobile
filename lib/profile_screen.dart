@@ -7,6 +7,7 @@ import 'package:daleel/ai_chat_screen.dart';
 import 'package:daleel/help_about_bottom_sheets.dart';
 import 'package:daleel/providers/theme_provider.dart';
 import 'package:daleel/settings_screen.dart';
+import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
@@ -129,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
           const Text(
-            'عماد',
+            'عماد',  // TODO: from user data
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
@@ -148,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           _buildMenuItem(
-            title: 'الحساب',
+            title: context.tr.account,
             iconPath: 'assets/icons/user.svg',
             onTap: () => Navigator.push(
               context,
@@ -157,7 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
-            title: 'الإعدادات',
+            title: context.tr.settings,
             iconPath: 'assets/icons/setting-02.svg',
             onTap: () => Navigator.push(
               context,
@@ -168,7 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           // داخل _buildMenuSection
           _buildMenuItem(
-            title: 'دليل الذكاء الاصطناعي',
+            title: context.tr.aiAssistant,
             iconPath:
                 'assets/icons/smart-phone-03.svg', // ← موجود بالفعل في البروجكت
             onTap: () => Navigator.push(
@@ -179,7 +180,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 12),
 
           _buildToggleMenuItem(
-            title: 'الإشعارات',
+            title: context.tr.notifications,
             iconPath: 'assets/icons/notification.svg',
             value: _notificationsEnabled,
             onChanged: (v) => setState(() => _notificationsEnabled = v),
@@ -187,7 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 12),
 
           _buildToggleMenuItem(
-            title: 'الوضع الليلي',
+            title: context.tr.darkMode,
             iconPath: 'assets/icons/moon-eclipse.svg',
             value: context.watch<ThemeProvider>().isDarkMode,
             onChanged: (v) => context.read<ThemeProvider>().toggleTheme(),
@@ -195,20 +196,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 12),
 
           _buildMenuItem(
-            title: 'المساعدة',
+            title: context.tr.help,
             iconPath: 'assets/icons/help-circle.svg',
             onTap: () => showHelpBottomSheet(context),
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
-            title: 'الوصف',
+            title: context.tr.about,
             iconPath: 'assets/icons/information-circle.svg',
             onTap: () => showAboutBottomSheet(context),
           ),
           const SizedBox(height: 12),
 
           _buildMenuItem(
-            title: 'تسجيل خروج',
+            title: context.tr.logout,
             iconPath: 'assets/icons/logout-05.svg',
             onTap: _showLogoutDialog,
             isLogout: true,

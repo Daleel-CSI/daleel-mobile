@@ -7,6 +7,7 @@ import 'package:daleel/popular_services_screen.dart';
 import 'package:daleel/category_services_screen.dart';
 import 'package:daleel/notifications_screen.dart';
 import 'package:daleel/ai_chat_screen.dart';
+import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -216,7 +217,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
               const SizedBox(width: 8),
               Text(
-                'مرحبا',
+                context.tr.hello,
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -383,7 +384,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _AnimatedButton(
-                text: 'اضافة مشوار',
+                text: context.tr.addTrip,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -396,7 +397,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 },
               ),
               Text(
-                'مشاويري',
+                context.tr.myTrips,
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -454,7 +455,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            'مسوغات العمل',
+                            context.tr.workDocs,
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -517,7 +518,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            'اكتشف مشاوير جديدة',
+            context.tr.discoverNewTrips,
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -535,12 +536,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             crossAxisSpacing: 16,
             childAspectRatio: 0.85,
             children: [
-              _buildServiceCard('الجيش', 'assets/icons/army.svg'),
-              _buildServiceCard('التخرج الجامعي', 'assets/icons/graduation.svg'),
-              _buildServiceCard('السفر للخارج', 'assets/icons/Container-4.svg'),
-              _buildServiceCard('الزواج', 'assets/icons/Component 1.svg'),
-              _buildServiceCard('ترخيص السيارات', 'assets/icons/car_license.svg'),
-              _buildServiceCard('المرور', 'assets/icons/Container-12.svg'),
+              _buildServiceCard(context.tr.categorySoldiers, 'assets/icons/army.svg'),
+              _buildServiceCard(context.tr.categoryGraduation, 'assets/icons/graduation.svg'),
+              _buildServiceCard(context.tr.categoryTravel, 'assets/icons/Container-4.svg'),
+              _buildServiceCard(context.tr.categoryMarriage, 'assets/icons/Component 1.svg'),
+              _buildServiceCard(context.tr.categoryCarLicense, 'assets/icons/car_license.svg'),
+              _buildServiceCard(context.tr.categoryTraffic, 'assets/icons/Container-12.svg'),
             ],
           ),
         ],
@@ -625,7 +626,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _AnimatedButton(
-                text: 'اظهار الكل',
+                text: context.tr.showAll,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -636,7 +637,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 },
               ),
               Text(
-                'الأكثر شيوعاً',
+                context.tr.mostPopular,
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -791,10 +792,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem('assets/icons/profile.svg', 'ملفي', 3),
-              _buildNavItem('assets/icons/Property 1=Component 2.svg', 'اكتشف', 2),
-              _buildNavItem('assets/icons/Bookmark.svg', 'مشاويري', 1),
-              _buildNavItem('assets/icons/home.svg', 'الرئيسية', 0),
+              _buildNavItem('assets/icons/profile.svg', context.tr.myProfile, 3),
+              _buildNavItem('assets/icons/Property 1=Component 2.svg', context.tr.discover, 2),
+              _buildNavItem('assets/icons/Bookmark.svg', context.tr.myTrips, 1),
+              _buildNavItem('assets/icons/home.svg', context.tr.home, 0),
             ],
           ),
         ),

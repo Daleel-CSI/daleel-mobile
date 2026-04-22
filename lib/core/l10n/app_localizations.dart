@@ -37,6 +37,7 @@ abstract class AppLocalizations {
   String get help;
   String get about;
   String get logout;
+  String get aiAssistant;
   String get darkMode;
   String get enableDarkMode;
   String get ok;
@@ -292,6 +293,7 @@ class _AppLocalizationsAr extends AppLocalizations {
   @override String get help => 'المساعدة';
   @override String get about => 'الوصف';
   @override String get logout => 'تسجيل خروج';
+  @override String get aiAssistant => 'دليل الذكاء الاصطناعي';
   @override String get darkMode => 'الوضع الليلي';
   @override String get enableDarkMode => 'تفعيل المظهر الداكن';
   @override String get ok => 'حسناً';
@@ -512,6 +514,7 @@ class _AppLocalizationsEn extends AppLocalizations {
   @override String get help => 'Help';
   @override String get about => 'About';
   @override String get logout => 'Logout';
+  @override String get aiAssistant => 'AI Assistant';
   @override String get darkMode => 'Dark Mode';
   @override String get enableDarkMode => 'Enable dark theme';
   @override String get ok => 'OK';

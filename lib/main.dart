@@ -1,4 +1,4 @@
-import 'package:daleel/l10n/app_localizations.dart';
+import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:daleel/core/themes/app_theme.dart';
 import 'package:daleel/providers/app_provider.dart';
 import 'package:daleel/providers/locale_provider.dart';
@@ -34,6 +34,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<ThemeProvider, LocaleProvider>(
       builder: (context, themeProvider, localeProvider, child) {
+        final isArabic = localeProvider.locale.languageCode == 'ar';
+
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Daleel',
@@ -42,7 +44,7 @@ class MyApp extends StatelessWidget {
           themeMode:
               themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
 
-          // ✅ اللغة الديناميكية
+          // اللغة الديناميكية - لما تتغير هنا بتتغير في كل التطبيق
           locale: localeProvider.locale,
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: [
@@ -52,12 +54,12 @@ class MyApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
 
-          // ✅ اتجاه النص تلقائي حسب اللغة
+          // الحل الصح للـ RTL/LTR
+          // عربي = يمين لشمال | إنجليزي = شمال ليمين
           builder: (context, child) {
             return Directionality(
-              textDirection: localeProvider.locale.languageCode == 'ar'
-                  ? TextDirection.rtl
-                  : TextDirection.ltr,
+              textDirection:
+                  isArabic ? TextDirection.rtl : TextDirection.ltr,
               child: child!,
             );
           },

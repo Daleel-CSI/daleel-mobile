@@ -1,4 +1,5 @@
 import 'package:daleel/providers/app_provider.dart';
+import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'category_services_screen.dart';
@@ -48,7 +49,7 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
           const Expanded(child: SizedBox()),
           Center(
             child: Text(
-              'الأكثر شيوعاً',
+              context.tr.mostPopular,
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -100,9 +101,9 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
                   ),
                 );
               },
-              child: const Text(
-                'اظهار الكل',
-                style: TextStyle(
+              child: Text(
+                context.tr.showAll,
+                style: const TextStyle(
                   fontSize: 13,
                   color: Color(0xFF379777),
                   fontWeight: FontWeight.w600,
@@ -257,15 +258,15 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
 
  String _getCategoryIcon(String category) {
     switch (category) {
-      case 'الجيش':
+      case 'army':
         return 'assets/icons/army.svg';
-      case 'التعليم':
+      case 'education':
         return 'assets/icons/Container-2.svg';
-      case 'الصحة':
+      case 'health':
         return 'assets/icons/Container-8.svg';
-      case 'النقل':
+      case 'transport':
         return 'assets/icons/Container-15.svg';
-      case 'السكن':
+      case 'housing':
         return 'assets/icons/Container-7.svg';
       default:
         return 'assets/icons/Container-9.svg';
