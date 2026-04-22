@@ -1,0 +1,58 @@
+name: daleel
+description: "A new Flutter project."
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter  
+
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.2.3
+  introduction_screen: ^4.0.0
+  shared_preferences: ^2.5.4
+  flutter_launcher_icons: ^0.14.4
+  intl: ^0.20.2
+  provider: ^6.1.5+1
+  file_picker: ^10.3.10
+  geolocator: ^14.0.2
+  geocoding: ^4.0.0
+  url_launcher: ^6.3.2
+  image_picker: ^1.2.1
+  http: ^1.6.0
+  skeletonizer: ^2.1.2
+  change_app_package_name: ^1.5.0
+
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/images/daleel-01.png"
+  min_sdk_android: 21
+  adaptive_icon_foreground: "assets/images/daleel-01.png"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Cairo-Regular.ttf
+          weight: 400
