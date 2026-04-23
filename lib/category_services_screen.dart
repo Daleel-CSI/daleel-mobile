@@ -1,4 +1,3 @@
-import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
@@ -221,11 +220,11 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen>
                               final trip = Trip(
                                 id: 'trip_${DateTime.now().millisecondsSinceEpoch}',
                                 title: service.title,
-                                date: _formatDate(DateTime.now(), context.tr),
+                                date: _formatDate(DateTime.now()),
                                 category: service.category,
                                 completedSteps: 0,
                                 totalSteps: _extractStepsCount(service.steps),
-                                currentStep: context.tr.notStarted,
+                                currentStep: 'لم يتم البدء',
                                 placeName: service.category,
                                 steps: [],
                               );
@@ -234,8 +233,8 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen>
                               // إظهار رسالة
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(
-                                    context.tr.serviceSaved,
+                                  content: const Text(
+                                    'تم حفظ الخدمة في مشاويري',
                                     textAlign: TextAlign.right,
                                   ),
                                   backgroundColor: const Color(0xFF379777),
@@ -404,13 +403,13 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen>
     return count.toString();
   }
 
-  String _formatDate(DateTime date, dynamic tr) {
-    final months = [
-      tr.monthJan, tr.monthFeb, tr.monthMar, tr.monthApr, tr.monthMay, tr.monthJun,
-      tr.monthJul, tr.monthAug, tr.monthSep, tr.monthOct, tr.monthNov, tr.monthDec
+  String _formatDate(DateTime date) {
+    const months = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
     ];
-    final days = [
-      tr.dayMon, tr.dayTue, tr.dayWed, tr.dayThu, tr.dayFri, tr.daySat, tr.daySun
+    const days = [
+      'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'
     ];
     
     return '${days[date.weekday - 1]} ${date.day} ${months[date.month - 1]}';

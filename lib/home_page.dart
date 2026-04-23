@@ -1,5 +1,6 @@
 import 'package:daleel/add_trip_screen.dart';
 import 'package:daleel/profile_screen.dart';
+import 'package:daleel/providers/user_provider.dart';
 import 'package:daleel/save_screen.dart';
 import 'package:daleel/discover_screen.dart';
 import 'package:daleel/search_results_screen.dart';
@@ -7,17 +8,12 @@ import 'package:daleel/popular_services_screen.dart';
 import 'package:daleel/category_services_screen.dart';
 import 'package:daleel/notifications_screen.dart';
 import 'package:daleel/ai_chat_screen.dart';
-import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
 
 class HomePage extends StatefulWidget {
-  final String? userName;
-  
-  const HomePage({
-    super.key,
-    this.userName,
-  });
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -27,16 +23,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _searchFocusNode = FocusNode();
-  
-  late String userName;
+
   int _selectedBottomIndex = 0;
-  
-  // Notifications state
   int _unreadNotificationsCount = 3;
-  
+
   int completedSteps = 5;
   int totalSteps = 5;
-  
+
   final List<PopularService> _popularServices = [
     PopularService(
       title: "شراء سيارة جديدة بالتقسيط",
@@ -63,13 +56,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       isFeatured: true,
     ),
   ];
-  
-  @override
-  void initState() {
-    super.initState();
-    userName = widget.userName ?? "عماد";
-  }
-  
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -88,15 +75,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SearchResultsScreen(
-          initialQuery: _searchController.text,
-        ),
+        builder: (context) => SearchResultsScreen(initialQuery: _searchController.text),
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
+    // Read the user data from UserProvider
+    final user = context.watch<UserProvider>().user;
+    final userName = user.displayName ?? user.email ?? 'مستخدم';
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: AnimatedSwitcher(
@@ -107,21 +96,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           final offsetAnimation = Tween<Offset>(
             begin: const Offset(1.0, 0.0),
             end: Offset.zero,
-          ).animate(CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeInOut,
-          ));
-          
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOut));
+
+          return SlideTransition(position: offsetAnimation, child: child);
         },
         child: IndexedStack(
           key: ValueKey<int>(_selectedBottomIndex),
           index: _selectedBottomIndex,
           children: [
-            _buildHomeContent(),
+            _buildHomeContent(userName),
             const SaveScreen(),
             DiscoverScreen(userName: userName),
             const ProfileScreen(),
@@ -129,61 +112,26 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
-      floatingActionButton: _selectedBottomIndex == 0
-          ? _buildAIChatFAB()
-          : null,
+      floatingActionButton: _selectedBottomIndex == 0 ? _buildAIChatFAB() : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 
-  Widget _buildAIChatFAB() {
-    return FloatingActionButton(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const AiChatScreen(),
-          ),
-        );
-      },
-      backgroundColor: const Color(0xFF379777),
-      elevation: 6,
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF379777), Color(0xFF4CAF88)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.chat_bubble_rounded,
-          color: Colors.white,
-          size: 26,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHomeContent() {
+  Widget _buildHomeContent(String userName) {
     return SafeArea(
       child: Column(
         children: [
-          _buildHeader(),
+          _buildHeader(userName),
           _buildSearchBar(),
-          
           Expanded(
             child: SingleChildScrollView(
               controller: _scrollController,
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  _buildTripsSection(),
+                  _buildTripsSection(userName),
                   const SizedBox(height: 30),
-                  _buildDiscoverSection(),
+                  _buildDiscoverSection(userName),
                   const SizedBox(height: 30),
                   _buildPopularSection(),
                   const SizedBox(height: 100),
@@ -195,20 +143,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
-  Widget _buildHeader() {
+
+  Widget _buildHeader(String userName) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Notification bell icon
           _buildNotificationBell(),
-          // Greeting
           Row(
             children: [
               Text(
-                userName,
+                userName,   // <-- dynamic user name
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -217,7 +163,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
               const SizedBox(width: 8),
               Text(
-                context.tr.hello,
+                'مرحبا',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -230,18 +176,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildNotificationBell() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasNotifications = _unreadNotificationsCount > 0;
-    
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const NotificationsScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const NotificationsScreen()),
         ).then((_) {
           setState(() {
             _unreadNotificationsCount = 0;
@@ -258,17 +202,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           clipBehavior: Clip.none,
           children: [
             SvgPicture.asset(
-              'assets/icons/notification.svg', 
+              'assets/icons/notification.svg',
               width: 24,
               height: 24,
               colorFilter: ColorFilter.mode(
-                hasNotifications 
-                    ? const Color(0xFF379777) 
+                hasNotifications
+                    ? const Color(0xFF379777)
                     : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                 BlendMode.srcIn,
               ),
             ),
-            // Badge
             if (hasNotifications)
               Positioned(
                 right: -6,
@@ -283,20 +226,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       width: 1.5,
                     ),
                   ),
-                  constraints: const BoxConstraints(
-                    minWidth: 18,
-                    minHeight: 18,
-                  ),
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
                   child: Center(
                     child: Text(
-                      _unreadNotificationsCount > 9
-                          ? '9+'
-                          : _unreadNotificationsCount.toString(),
+                      _unreadNotificationsCount > 9 ? '9+' : _unreadNotificationsCount.toString(),
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        height: 1,
+                        color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1,
                       ),
                     ),
                   ),
@@ -307,10 +242,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildSearchBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: GestureDetector(
@@ -343,7 +278,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       Colors.grey.shade600,
                       BlendMode.srcIn,
                     ),
-                    // في حالة فشل تحميل SVG، استخدم Icon
                     placeholderBuilder: (context) => Icon(
                       Icons.search,
                       color: Colors.grey.shade600,
@@ -353,10 +287,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     child: Text(
                       'تجديد بطاقة، رخصة، قيد عائلي   ابحث عن مشوارك',
                       textAlign: TextAlign.right,
@@ -374,8 +305,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
-  Widget _buildTripsSection() {
+
+  Widget _buildTripsSection(String userName) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -384,20 +315,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _AnimatedButton(
-                text: context.tr.addTrip,
+                text: 'اضافة مشوار',
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => AddTripScreen(
-                        userName: userName,
-                      ),
+                      builder: (context) => AddTripScreen(userName: userName),
                     ),
                   );
                 },
               ),
               Text(
-                context.tr.myTrips,
+                'مشاويري',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -406,9 +335,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ],
           ),
-          
           const SizedBox(height: 20),
-          
           _AnimatedCard(
             onTap: () {},
             child: Container(
@@ -431,9 +358,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   value: completedSteps / totalSteps,
                                   strokeWidth: 6,
                                   backgroundColor: const Color(0xFFE8F5E9),
-                                  valueColor: const AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF379777),
-                                  ),
+                                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF379777)),
                                 ),
                               ),
                             ),
@@ -450,12 +375,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ],
                         ),
                       ),
-                      
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            context.tr.workDocs,
+                            'مسوغات العمل',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -474,14 +398,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       ),
                     ],
                   ),
-                  
                   const SizedBox(height: 16),
-                  
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark 
-                          ? const Color(0xFF2A2A2A) 
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF2A2A2A)
                           : const Color(0xFFF8F8F8),
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -510,24 +432,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
-  Widget _buildDiscoverSection() {
+
+  Widget _buildDiscoverSection(String userName) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            context.tr.discoverNewTrips,
+            'اكتشف مشاوير جديدة',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
               color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
           ),
-          
           const SizedBox(height: 20),
-          
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -536,25 +456,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             crossAxisSpacing: 16,
             childAspectRatio: 0.85,
             children: [
-              _buildServiceCard(context.tr.categorySoldiers, 'assets/icons/army.svg'),
-              _buildServiceCard(context.tr.categoryGraduation, 'assets/icons/graduation.svg'),
-              _buildServiceCard(context.tr.categoryTravel, 'assets/icons/Container-4.svg'),
-              _buildServiceCard(context.tr.categoryMarriage, 'assets/icons/Component 1.svg'),
-              _buildServiceCard(context.tr.categoryCarLicense, 'assets/icons/car_license.svg'),
-              _buildServiceCard(context.tr.categoryTraffic, 'assets/icons/Container-12.svg'),
+              _buildServiceCard('الجيش', 'assets/icons/army.svg', userName),
+              _buildServiceCard('التخرج الجامعي', 'assets/icons/graduation.svg', userName),
+              _buildServiceCard('السفر للخارج', 'assets/icons/Container-4.svg', userName),
+              _buildServiceCard('الزواج', 'assets/icons/Component 1.svg', userName),
+              _buildServiceCard('ترخيص السيارات', 'assets/icons/car_license.svg', userName),
+              _buildServiceCard('المرور', 'assets/icons/Container-12.svg', userName),
             ],
           ),
         ],
       ),
     );
   }
-  
-  Widget _buildServiceCard(String title, String? svgPath, {bool isMore = false}) {
+
+  Widget _buildServiceCard(String title, String? svgPath, String userName, {bool isMore = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return _ClickableServiceCard(
       onTap: () {
-        // فتح صفحة الخدمات حسب القسم
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -573,32 +492,23 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: isMore 
+              color: isMore
                   ? (isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100)
                   : const Color(0xFFB2E4D0).withOpacity(0.3),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child: isMore 
-                  ? const Icon(
-                      Icons.more_horiz,
-                      size: 28,
-                      color: Color(0xFF379777),
-                    )
+              child: isMore
+                  ? const Icon(Icons.more_horiz, size: 28, color: Color(0xFF379777))
                   : SvgPicture.asset(
                       svgPath!,
                       width: 28,
                       height: 28,
-                      colorFilter: const ColorFilter.mode(
-                        Color(0xFF379777),
-                        BlendMode.srcIn,
-                      ),
+                      colorFilter: const ColorFilter.mode(Color(0xFF379777), BlendMode.srcIn),
                     ),
             ),
           ),
-          
           const SizedBox(height: 12),
-          
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
@@ -616,7 +526,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildPopularSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -626,18 +536,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _AnimatedButton(
-                text: context.tr.showAll,
+                text: 'اظهار الكل',
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) => const PopularServicesScreen(),
-                    ),
+                    MaterialPageRoute(builder: (context) => const PopularServicesScreen()),
                   );
                 },
               ),
               Text(
-                context.tr.mostPopular,
+                'الأكثر شيوعاً',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -646,9 +554,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ],
           ),
-          
           const SizedBox(height: 16),
-          
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -661,10 +567,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildPopularServiceCard(PopularService service) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return _AnimatedCard(
       onTap: () {},
       margin: const EdgeInsets.only(bottom: 16),
@@ -678,10 +584,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               children: [
                 Text(
                   '(${_formatReviewCount(service.reviewCount)} حضور)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 Row(
                   children: [
@@ -694,18 +597,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(
-                      Icons.star,
-                      color: Color(0xFF379777),
-                      size: 18,
-                    ),
+                    const Icon(Icons.star, color: Color(0xFF379777), size: 18),
                   ],
                 ),
               ],
             ),
-            
             const SizedBox(height: 12),
-            
             Text(
               service.title,
               textAlign: TextAlign.right,
@@ -716,28 +613,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 height: 1.4,
               ),
             ),
-            
             const SizedBox(height: 12),
-            
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (service.source.isNotEmpty) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       service.source,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade700,
-                      ),
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -746,17 +635,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   children: [
                     Text(
                       service.location,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade700,
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(
-                      Icons.circle,
-                      color: Color(0xFF379777),
-                      size: 8,
-                    ),
+                    const Icon(Icons.circle, color: Color(0xFF379777), size: 8),
                   ],
                 ),
               ],
@@ -766,14 +648,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   String _formatReviewCount(int count) {
     if (count >= 1000) {
       return '${(count / 1000).toStringAsFixed(0)}K+';
     }
     return count.toString();
   }
-  
+
   Widget _buildBottomNavigationBar() {
     return Container(
       decoration: BoxDecoration(
@@ -792,20 +674,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem('assets/icons/profile.svg', context.tr.myProfile, 3),
-              _buildNavItem('assets/icons/Property 1=Component 2.svg', context.tr.discover, 2),
-              _buildNavItem('assets/icons/Bookmark.svg', context.tr.myTrips, 1),
-              _buildNavItem('assets/icons/home.svg', context.tr.home, 0),
+              _buildNavItem('assets/icons/profile.svg', 'ملفي', 3),
+              _buildNavItem('assets/icons/Property 1=Component 2.svg', 'اكتشف', 2),
+              _buildNavItem('assets/icons/Bookmark.svg', 'مشاويري', 1),
+              _buildNavItem('assets/icons/home.svg', 'الرئيسية', 0),
             ],
           ),
         ),
       ),
     );
   }
-  
+
   Widget _buildNavItem(String svgPath, String label, int index) {
     final isActive = _selectedBottomIndex == index;
-    
+
     return InkWell(
       onTap: () => _onNavItemTapped(index),
       borderRadius: BorderRadius.circular(12),
@@ -813,9 +695,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive 
-              ? const Color(0xFF379777).withOpacity(0.1) 
-              : Colors.transparent,
+          color: isActive ? const Color(0xFF379777).withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -844,24 +724,49 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
+
+  Widget _buildAIChatFAB() {
+    return FloatingActionButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AIChatScreen()),
+        );
+      },
+      backgroundColor: const Color(0xFF379777),
+      elevation: 6,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF379777), Color(0xFF4CAF88)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.chat_bubble_rounded,
+          color: Colors.white,
+          size: 26,
+        ),
+      ),
+    );
+  }
 }
 
+// =================== Helper widgets (unchanged) ===================
 class _AnimatedButton extends StatefulWidget {
   final String text;
   final VoidCallback onTap;
-  
-  const _AnimatedButton({
-    required this.text,
-    required this.onTap,
-  });
-  
+  const _AnimatedButton({required this.text, required this.onTap});
   @override
   State<_AnimatedButton> createState() => _AnimatedButtonState();
 }
 
 class _AnimatedButtonState extends State<_AnimatedButton> {
   bool _isPressed = false;
-  
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -875,9 +780,7 @@ class _AnimatedButtonState extends State<_AnimatedButton> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: _isPressed 
-              ? const Color(0xFF379777) 
-              : const Color(0xFFB2E4D0),
+          color: _isPressed ? const Color(0xFF379777) : const Color(0xFFB2E4D0),
           borderRadius: BorderRadius.circular(10),
           boxShadow: _isPressed ? [] : [
             BoxShadow(
@@ -904,20 +807,13 @@ class _AnimatedCard extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry? margin;
-  
-  const _AnimatedCard({
-    required this.child,
-    this.onTap,
-    this.margin,
-  });
-  
+  const _AnimatedCard({required this.child, this.onTap, this.margin});
   @override
   State<_AnimatedCard> createState() => _AnimatedCardState();
 }
 
 class _AnimatedCardState extends State<_AnimatedCard> {
   bool _isPressed = false;
-  
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -937,7 +833,7 @@ class _AnimatedCardState extends State<_AnimatedCard> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: _isPressed 
+                color: _isPressed
                     ? const Color(0xFF379777).withOpacity(0.2)
                     : Colors.black.withOpacity(0.08),
                 blurRadius: _isPressed ? 16 : 12,
@@ -955,19 +851,13 @@ class _AnimatedCardState extends State<_AnimatedCard> {
 class _ClickableServiceCard extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
-  
-  const _ClickableServiceCard({
-    required this.child,
-    required this.onTap,
-  });
-  
+  const _ClickableServiceCard({required this.child, required this.onTap});
   @override
   State<_ClickableServiceCard> createState() => _ClickableServiceCardState();
 }
 
 class _ClickableServiceCardState extends State<_ClickableServiceCard> {
   bool _isPressed = false;
-  
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -987,7 +877,7 @@ class _ClickableServiceCardState extends State<_ClickableServiceCard> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: _isPressed 
+                color: _isPressed
                     ? const Color(0xFF379777).withOpacity(0.15)
                     : Colors.black.withOpacity(0.06),
                 blurRadius: _isPressed ? 12 : 8,
@@ -1009,7 +899,7 @@ class PopularService {
   final String location;
   final String source;
   final bool isFeatured;
-  
+
   PopularService({
     required this.title,
     required this.rating,

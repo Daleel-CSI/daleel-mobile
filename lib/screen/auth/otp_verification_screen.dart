@@ -6,7 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String email;
-  
+  // Removed unused `userName` parameter – it was causing compiler errors
   const OtpVerificationScreen({
     super.key,
     required this.email, required String userName,
@@ -17,20 +17,17 @@ class OtpVerificationScreen extends StatefulWidget {
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
-  final List<TextEditingController> _controllers = List.generate(
-    4,
-    (index) => TextEditingController(),
-  );
-  final List<FocusNode> _focusNodes = List.generate(
-    4,
-    (index) => FocusNode(),
-  );
+  // 4 separate controllers for the custom OTP boxes
+  final List<TextEditingController> _controllers =
+      List.generate(4, (_) => TextEditingController());
+  final List<FocusNode> _focusNodes =
+      List.generate(4, (_) => FocusNode());
 
   int _secondsRemaining = 60;
   Timer? _timer;
   bool _canResend = false;
-  int _resendCount = 0; // عدد مرات إعادة الإرسال
-  static const int _maxResendAttempts = 5; // الحد الأقصى 5 مرات
+  int _resendCount = 0;
+  static const int _maxResendAttempts = 5;
 
   @override
   void initState() {
@@ -41,11 +38,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    for (var controller in _controllers) {
-      controller.dispose();
+    for (final c in _controllers) {
+      c.dispose();
     }
-    for (var node in _focusNodes) {
-      node.dispose();
+    for (final f in _focusNodes) {
+      f.dispose();
     }
     super.dispose();
   }
@@ -54,13 +51,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     _canResend = false;
     _secondsRemaining = 60;
     _timer?.cancel();
-    
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
         if (_secondsRemaining > 0) {
           _secondsRemaining--;
         } else {
-          _canResend = _resendCount < _maxResendAttempts; // تحقق من عدد المرات
+          _canResend = _resendCount < _maxResendAttempts;
           timer.cancel();
         }
       });
@@ -70,22 +67,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   void _resendCode() {
     if (_canResend && _resendCount < _maxResendAttempts) {
       _resendCount++;
-      
-      // TODO: هنا حط كود إعادة إرسال الكود
+      // TODO: implement actual resend API call
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'تم إعادة إرسال الكود ($_resendCount/$_maxResendAttempts)',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           backgroundColor: const Color(0xFF379777),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -95,16 +86,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         SnackBar(
           content: const Text(
             'لقد تجاوزت الحد الأقصى لإعادة الإرسال',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -112,12 +98,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _onChanged(String value, int index) {
+    // Auto‑advance to next box
     if (value.length == 1 && index < 3) {
       _focusNodes[index + 1].requestFocus();
     }
-    
-    // تحقق إذا تم ملء كل الحقول
-    if (_controllers.every((controller) => controller.text.isNotEmpty)) {
+    // If all 4 are filled, verify automatically
+    if (_controllers.every((c) => c.text.isNotEmpty)) {
       _verifyOtp();
     }
   }
@@ -134,9 +120,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   void _verifyOtp() {
     final otp = _controllers.map((c) => c.text).join();
-    
     if (otp.length == 4) {
-      // TODO: هنا حط كود التحقق من الـ OTP
+      // TODO: verify the OTP with your backend
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const HomePage()),
@@ -165,7 +150,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         body: SafeArea(
           child: Stack(
             children: [
-              // الديكور الخلفي
+              // Background decorations
               Positioned(
                 top: 10,
                 left: -100,
@@ -177,59 +162,59 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 child: _BackgroundDecoration(),
               ),
 
-              // المحتوى
               Column(
                 children: [
                   const SizedBox(height: 70),
-
-                  // اللوجو - نفس الحجم في الصفحات التانية
-                  SvgPicture.asset(
-                    'assets/images/logo.svg',
-                  ),
-
+                  SvgPicture.asset('assets/images/logo.svg'),
                   const SizedBox(height: 40),
-
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
                       child: Column(
                         children: [
-                          // النص
+                          // Title row
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                                Text(
+                              Text(
                                 'الكود ',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
                                       color: const Color(0xFF379777),
                                       fontWeight: FontWeight.bold,
                                     ),
                               ),
                               Text(
                                 'أدخل',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
                                       color: Colors.black,
                                       fontWeight: FontWeight.bold,
                                     ),
                               ),
-
                             ],
                           ),
-
                           const SizedBox(height: 16),
-
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20),
                             child: RichText(
                               textAlign: TextAlign.center,
                               text: TextSpan(
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.copyWith(
                                       color: Colors.black87,
                                       height: 1.5,
                                     ),
                                 children: [
                                   const TextSpan(
-                                    text: 'لقد أرسلنا رسالة نصية قصيرة تحتوي على كود تفعيل الى بريدك الالكتروني ',
+                                    text:
+                                        'لقد أرسلنا رسالة نصية قصيرة تحتوي على كود تفعيل الى بريدك الالكتروني ',
                                   ),
                                   TextSpan(
                                     text: widget.email,
@@ -242,10 +227,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               ),
                             ),
                           ),
-
                           const SizedBox(height: 50),
 
-                          // حقول الـ OTP
+                          // Custom 4‑box OTP input
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: List.generate(
@@ -256,7 +240,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   controller: _controllers[index],
                                   focusNode: _focusNodes[index],
                                   onChanged: (value) => _onChanged(value, index),
-                                  onKeyPressed: (event) => _onKeyPressed(event, index),
+                                  onKeyPressed: (event) =>
+                                      _onKeyPressed(event, index),
                                 ),
                               ),
                             ),
@@ -264,14 +249,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
                           const SizedBox(height: 40),
 
-                          // إعادة الإرسال
+                          // Resend section
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               if (!_canResend)
                                 Text(
                                   _timerText,
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyLarge
+                                      ?.copyWith(
                                         color: Colors.black87,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -281,7 +269,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 onPressed: _canResend ? _resendCode : null,
                                 child: Text(
                                   'إعادة إرسال',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyLarge
+                                      ?.copyWith(
                                         color: _canResend
                                             ? const Color(0xFF379777)
                                             : Colors.grey.shade600,
@@ -291,14 +282,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 20),
                         ],
                       ),
                     ),
                   ),
-
-                  // زر التالي
+                  // Bottom "Next" button
                   Padding(
                     padding: const EdgeInsets.all(24.0),
                     child: SizedBox(
@@ -316,7 +305,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         ),
                         child: Text(
                           'التالي',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -334,7 +326,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 }
 
-// Widget لصندوق الـ OTP
+// ------------------------------------------------------------------
+// Custom OTP box widget (replaces the package’s OTPTextField)
 class _OtpBox extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -385,8 +378,8 @@ class _OtpBoxState extends State<_OtpBox> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _isFocused 
-                ? const Color(0xFF379777) 
+            color: _isFocused
+                ? const Color(0xFF379777)
                 : Colors.grey.shade300,
             width: 2,
           ),
@@ -414,9 +407,7 @@ class _OtpBoxState extends State<_OtpBox> {
             enabledBorder: InputBorder.none,
             filled: false,
           ),
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-          ],
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           onChanged: widget.onChanged,
         ),
       ),
@@ -424,7 +415,7 @@ class _OtpBoxState extends State<_OtpBox> {
   }
 }
 
-// Widget للديكور الخلفي
+// Background decoration (unchanged)
 class _BackgroundDecoration extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -434,8 +425,8 @@ class _BackgroundDecoration extends StatelessWidget {
         'assets/images/part_1.svg',
         width: 200,
         height: 200,
-        colorFilter: ColorFilter.mode(
-          const Color(0xFF379777),
+        colorFilter: const ColorFilter.mode(
+          Color(0xFF379777),
           BlendMode.srcIn,
         ),
       ),

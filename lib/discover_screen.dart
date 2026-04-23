@@ -1,4 +1,3 @@
-import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'category_services_screen.dart';
@@ -20,29 +19,26 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   bool _isSearchExpanded = false;
 
-  List<ServiceCategory> _getCategories(BuildContext context) {
-    final tr = context.tr;
-    return [
-    ServiceCategory(title: tr.categorySoldiers, iconPath: 'assets/icons/army.svg'),
-    ServiceCategory(title: tr.categoryGraduation, iconPath: 'assets/icons/graduation.svg'),
-    ServiceCategory(title: tr.categoryMarriage, iconPath: 'assets/icons/Component 1.svg'),
-    ServiceCategory(title: tr.categoryUniversity, iconPath: 'assets/icons/Container-4.svg'),
-    ServiceCategory(title: tr.categoryCarLicense, iconPath: 'assets/icons/car_license.svg'),
-    ServiceCategory(title: tr.categoryTravel, iconPath: 'assets/icons/Container-4.svg'),
-    ServiceCategory(title: tr.categoryTaxes, iconPath: 'assets/icons/graduation.svg'),
-    ServiceCategory(title: tr.categorySchools, iconPath: 'assets/icons/graduation.svg'),
-    ServiceCategory(title: tr.categoryNeighborhood, iconPath: 'assets/icons/Component 1.svg'),
-    ServiceCategory(title: tr.categoryHealth, iconPath: 'assets/icons/army.svg'),
-    ServiceCategory(title: tr.categoryRealEstate, iconPath: 'assets/icons/graduation.svg'),
-    ServiceCategory(title: tr.categoryHousing, iconPath: 'assets/icons/Component 1.svg'),
-    ServiceCategory(title: tr.categoryJobs, iconPath: 'assets/icons/car_license.svg'),
-    ServiceCategory(title: tr.categoryTraffic, iconPath: 'assets/icons/car_license.svg'),
-    ServiceCategory(title: tr.categoryCompanies, iconPath: 'assets/icons/Component 1.svg'),
-    ServiceCategory(title: tr.categoryInsurance, iconPath: 'assets/icons/graduation.svg'),
-    ServiceCategory(title: tr.categoryCustoms, iconPath: 'assets/icons/Container-4.svg'),
-    ServiceCategory(title: tr.categoryImportExport, iconPath: 'assets/icons/Container-4.svg'),
-    ];
-  }
+  final List<ServiceCategory> _categories = [
+    ServiceCategory(title: 'الجيش', iconPath: 'assets/icons/army.svg'),
+    ServiceCategory(title: 'التخرج الجامعي', iconPath: 'assets/icons/graduation.svg'),
+    ServiceCategory(title: 'الزواج', iconPath: 'assets/icons/Component 1.svg'),
+    ServiceCategory(title: 'التقديم الجامعي', iconPath: 'assets/icons/Container-4.svg'),
+    ServiceCategory(title: 'ترخيص السيارات', iconPath: 'assets/icons/car_license.svg'),
+    ServiceCategory(title: 'السفر للخارج', iconPath: 'assets/icons/Container-4.svg'),
+    ServiceCategory(title: 'الضرائب', iconPath: 'assets/icons/graduation.svg'),
+    ServiceCategory(title: 'المدارس', iconPath: 'assets/icons/graduation.svg'),
+    ServiceCategory(title: 'الحي', iconPath: 'assets/icons/Component 1.svg'),
+    ServiceCategory(title: 'الصحة', iconPath: 'assets/icons/army.svg'),
+    ServiceCategory(title: 'الشهر العقاري', iconPath: 'assets/icons/graduation.svg'),
+    ServiceCategory(title: 'الإسكان', iconPath: 'assets/icons/Component 1.svg'),
+    ServiceCategory(title: 'الوظائف', iconPath: 'assets/icons/car_license.svg'),
+    ServiceCategory(title: 'المرور', iconPath: 'assets/icons/car_license.svg'),
+    ServiceCategory(title: 'شركات', iconPath: 'assets/icons/Component 1.svg'),
+    ServiceCategory(title: 'التأمينات', iconPath: 'assets/icons/graduation.svg'),
+    ServiceCategory(title: 'الجمارك', iconPath: 'assets/icons/Container-4.svg'),
+    ServiceCategory(title: 'الاستيراد و التصدير', iconPath: 'assets/icons/Container-4.svg'),
+  ];
 
   @override
   void initState() {
@@ -93,7 +89,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Center(
         child: Text(
-          context.tr.discoverServices,
+          'اكتشف الخدمات',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -160,7 +156,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         color: Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                       decoration: InputDecoration(
-                        hintText: context.tr.searchForService,
+                        hintText: 'ابحث عن خدمة...',
                         hintStyle: TextStyle(
                           color: Colors.grey.shade500,
                           fontSize: 13,
@@ -198,7 +194,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    context.tr.searchResults,
+                    'نتائج البحث',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -270,9 +266,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           crossAxisSpacing: 16,
           childAspectRatio: 1.0,
         ),
-        itemCount: _getCategories(context).length,
+        itemCount: _categories.length,
         itemBuilder: (context, index) {
-          return _buildCategoryCard(_getCategories(context)[index]);
+          return _buildCategoryCard(_categories[index]);
         },
       ),
     );

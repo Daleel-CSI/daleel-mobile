@@ -1,5 +1,4 @@
 import 'package:daleel/providers/app_provider.dart';
-import 'package:daleel/core/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:provider/provider.dart';
@@ -55,7 +54,7 @@ class _SaveScreenState extends State<SaveScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            context.tr.myTrips,
+            'مشاويري',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -85,7 +84,7 @@ class _SaveScreenState extends State<SaveScreen> {
           ),
           const SizedBox(height: 24),
           Text(
-            context.tr.noSavedTrips,
+            'لا توجد مشاوير محفوظة',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -94,7 +93,7 @@ class _SaveScreenState extends State<SaveScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            context.tr.saveServicesHint,
+            'ابحث عن الخدمات واحفظها هنا',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey.shade600,
@@ -283,7 +282,7 @@ class _SaveScreenState extends State<SaveScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                context.tr.deleteTrip,
+                'حذف المشوار',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 20,
@@ -297,7 +296,7 @@ class _SaveScreenState extends State<SaveScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                context.tr.confirmDeleteTrip,
+                'هل أنت متأكد من حذف هذا المشوار؟',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -307,7 +306,7 @@ class _SaveScreenState extends State<SaveScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                context.tr.cannotRestore,
+                'لن تتمكن من استرجاعه مرة أخرى',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
@@ -331,9 +330,9 @@ class _SaveScreenState extends State<SaveScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(
-                      context.tr.cancel,
-                      style: const TextStyle(
+                    child: const Text(
+                      'إلغاء',
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF379777),
@@ -352,12 +351,12 @@ class _SaveScreenState extends State<SaveScreen> {
                         SnackBar(
                           content: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                              const SizedBox(width: 8),
+                            children: const [
+                              Icon(Icons.check_circle, color: Colors.white, size: 20),
+                              SizedBox(width: 8),
                               Text(
-                                context.tr.tripDeleted,
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                'تم حذف المشوار',
+                                style: TextStyle(fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -380,9 +379,9 @@ class _SaveScreenState extends State<SaveScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(
-                      context.tr.delete,
-                      style: const TextStyle(
+                    child: const Text(
+                      'حذف',
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
