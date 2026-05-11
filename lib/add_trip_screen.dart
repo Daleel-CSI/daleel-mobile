@@ -1,10 +1,14 @@
 // ignore_for_file: unused_field
+import 'dart:convert';
+
 import 'package:daleel/api/location_service.dart';
 import 'package:daleel/providers/app_provider.dart';
+import 'package:daleel/providers/user_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 
@@ -499,48 +503,49 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     );
   }
 
-  void _submitTrip() {
-    // التحقق من الخطوات
-    if (_tripSteps.isEmpty) {
+ Future<void> _createService() async {
+    if (_tripSteps.isEmpty) {  if (_tripSteps.isEmpty) {
       _showSnackBar('يرجى إضافة خطوة واحدة على الأقل', isError: true);
       return;
-    }
-    
-    for (var step in _tripSteps) {
-      if (step.titleController.text.isEmpty) {
-        _showSnackBar('يرجى ملء عنوان جميع الخطوات', isError: true);
-        return;
-      }
-    }
+    } }
+    // تجهيز البيانات
+    final token = context.read<UserProvider>().user.token;
+    if (token == null) return;
 
-    // إنشاء خدمة جديدة وإضافتها للـ provider
-    final servicesProvider = Provider.of<ServicesProvider>(context, listen: false);
-    
-    final newService = ServiceItem(
-      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-      title: _tripNameController.text,
-      description: _descriptionController.text.isNotEmpty 
-          ? _descriptionController.text 
-          : 'خدمة مخصصة من إنشاء المستخدم',
-      category: _selectedCategory!,
-      steps: '(${_tripSteps.length} ${_tripSteps.length == 1 ? "خطوة" : "خطوات"})',
-      author: widget.userName,
-      source: 'خدمة مخصصة',
-      rating: 0.0,
-      reviewCount: 0,
-      views: 0,
-      isSaved: false,
-    );
-    
-    servicesProvider.addUserService(newService);
-    
-    _showSnackBar('تم إضافة المشوار بنجاح ✨');
-    
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) {
+    final body = {
+      "title": _tripNameController.text,
+      "description": _descriptionController.text,
+      "category": _selectedCategory,
+      // "steps": ... ممكن نبعت الخطوات كمصفوفة لو الباك إند بيدعم
+      "author": widget.userName,
+      // "source": "مستخدم",   // لو عايز تضيف
+    };
+
+    try {
+      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/services');
+      final response = await http.post(url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: json.encode(body));
+
+      if (response.statusCode == 201) {
+        final newServiceData = json.decode(response.body)['data'] ?? json.decode(response.body);
+        final newService = ServiceItem.fromJson(newServiceData);
+        // ignore: use_build_context_synchronously
+        context.read<ServicesProvider>().addServiceLocally(newService);
+        _showSnackBar('تم إضافة المشوار بنجاح ✨');
+        // ignore: use_build_context_synchronously
         Navigator.pop(context);
+      } else {
+        String errorMsg = 'فشل الإضافة';
+        try { errorMsg = json.decode(response.body)['message']; } catch (_) {}
+        _showSnackBar(errorMsg, isError: true);
       }
-    });
+    } catch (e) {
+      _showSnackBar('خطأ في الاتصال', isError: true);
+    }
   }
 
   @override
@@ -1149,7 +1154,9 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: _submitTrip,
+                onPressed: () async {
+                  await _createService();
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF379777),
                   foregroundColor: Colors.white,

@@ -1,6 +1,7 @@
 import 'package:daleel/add_trip_screen.dart';
 import 'package:daleel/profile_screen.dart';
 import 'package:daleel/providers/user_provider.dart';
+import 'package:daleel/providers/app_provider.dart';
 import 'package:daleel/save_screen.dart';
 import 'package:daleel/discover_screen.dart';
 import 'package:daleel/search_results_screen.dart';
@@ -58,6 +59,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // استدعاء الخدمات من الخادم بعد بناء الواجهة
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final token = context.read<UserProvider>().user.token;
+      if (token != null && token.isNotEmpty) {
+        context.read<ServicesProvider>().fetchServices(token);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
@@ -75,16 +88,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SearchResultsScreen(initialQuery: _searchController.text),
+        builder: (context) =>
+            SearchResultsScreen(initialQuery: _searchController.text),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Read the user data from UserProvider
+    // ✅ جلب بيانات المستخدم من UserProvider
     final user = context.watch<UserProvider>().user;
-    final userName = user.displayName ?? user.email ?? 'مستخدم';
+    // ✅ عرض الاسم: displayName (الذي قد يكون اسم المستخدم الحقيقي) أو "مستخدم"
+    final userName = user.displayName ?? 'مستخدم';
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -97,7 +112,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             begin: const Offset(1.0, 0.0),
             end: Offset.zero,
           ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOut));
-
           return SlideTransition(position: offsetAnimation, child: child);
         },
         child: IndexedStack(
@@ -112,7 +126,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
-      floatingActionButton: _selectedBottomIndex == 0 ? _buildAIChatFAB() : null,
+      floatingActionButton:
+          _selectedBottomIndex == 0 ? _buildAIChatFAB() : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
@@ -154,7 +169,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           Row(
             children: [
               Text(
-                userName,   // <-- dynamic user name
+                userName,   // ⬅️ الاسم الديناميكي
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -185,7 +200,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+          MaterialPageRoute(
+              builder: (context) => const NotificationsScreen()),
         ).then((_) {
           setState(() {
             _unreadNotificationsCount = 0;
@@ -217,7 +233,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 right: -6,
                 top: -6,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE57373),
                     borderRadius: BorderRadius.circular(10),
@@ -226,13 +243,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       width: 1.5,
                     ),
                   ),
-                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  constraints: const BoxConstraints(
+                      minWidth: 18, minHeight: 18),
                   child: Center(
                     child: Text(
-                      _unreadNotificationsCount > 9 ? '9+' : _unreadNotificationsCount.toString(),
+                      _unreadNotificationsCount > 9
+                          ? '9+'
+                          : _unreadNotificationsCount.toString(),
                       style: const TextStyle(
-                        color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1,
-                      ),
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          height: 1),
                     ),
                   ),
                 ),
@@ -263,7 +285,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
           child: Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
+              color:
+                  isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -278,16 +301,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       Colors.grey.shade600,
                       BlendMode.srcIn,
                     ),
-                    placeholderBuilder: (context) => Icon(
-                      Icons.search,
-                      color: Colors.grey.shade600,
-                      size: 22,
-                    ),
+                    placeholderBuilder: (context) => Icon(Icons.search,
+                        color: Colors.grey.shade600, size: 22),
                   ),
                 ),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
                     child: Text(
                       'تجديد بطاقة، رخصة، قيد عائلي   ابحث عن مشوارك',
                       textAlign: TextAlign.right,
@@ -358,7 +379,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   value: completedSteps / totalSteps,
                                   strokeWidth: 6,
                                   backgroundColor: const Color(0xFFE8F5E9),
-                                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF379777)),
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                          Color(0xFF379777)),
                                 ),
                               ),
                             ),
@@ -383,16 +406,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.color,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'اليوم الأربعاء 5 مايو',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                            ),
+                                fontSize: 12, color: Colors.grey.shade500),
                           ),
                         ],
                       ),
@@ -416,7 +440,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             textAlign: TextAlign.right,
                             style: TextStyle(
                               fontSize: 13,
-                              color: Theme.of(context).textTheme.bodyLarge?.color?.withOpacity(0.7),
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.color
+                                  ?.withOpacity(0.7),
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -434,6 +462,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildDiscoverSection(String userName) {
+    // خدمات Discover تأتي من Provider الذي تم تحديثه
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -457,11 +486,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             childAspectRatio: 0.85,
             children: [
               _buildServiceCard('الجيش', 'assets/icons/army.svg', userName),
-              _buildServiceCard('التخرج الجامعي', 'assets/icons/graduation.svg', userName),
-              _buildServiceCard('السفر للخارج', 'assets/icons/Container-4.svg', userName),
-              _buildServiceCard('الزواج', 'assets/icons/Component 1.svg', userName),
-              _buildServiceCard('ترخيص السيارات', 'assets/icons/car_license.svg', userName),
-              _buildServiceCard('المرور', 'assets/icons/Container-12.svg', userName),
+              _buildServiceCard(
+                  'التخرج الجامعي', 'assets/icons/graduation.svg', userName),
+              _buildServiceCard(
+                  'السفر للخارج', 'assets/icons/Container-4.svg', userName),
+              _buildServiceCard(
+                  'الزواج', 'assets/icons/Component 1.svg', userName),
+              _buildServiceCard(
+                  'ترخيص السيارات', 'assets/icons/car_license.svg', userName),
+              _buildServiceCard(
+                  'المرور', 'assets/icons/Container-12.svg', userName),
             ],
           ),
         ],
@@ -469,7 +503,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildServiceCard(String title, String? svgPath, String userName, {bool isMore = false}) {
+  Widget _buildServiceCard(
+    String title,
+    String? svgPath,
+    String userName, {
+    bool isMore = false,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return _ClickableServiceCard(
@@ -499,12 +538,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
             child: Center(
               child: isMore
-                  ? const Icon(Icons.more_horiz, size: 28, color: Color(0xFF379777))
+                  ? const Icon(Icons.more_horiz,
+                      size: 28, color: Color(0xFF379777))
                   : SvgPicture.asset(
                       svgPath!,
                       width: 28,
                       height: 28,
-                      colorFilter: const ColorFilter.mode(Color(0xFF379777), BlendMode.srcIn),
+                      colorFilter: const ColorFilter.mode(
+                          Color(0xFF379777), BlendMode.srcIn),
                     ),
             ),
           ),
@@ -540,7 +581,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const PopularServicesScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const PopularServicesScreen()),
                   );
                 },
               ),
@@ -593,11 +635,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                        color:
+                            Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.star, color: Color(0xFF379777), size: 18),
+                    const Icon(Icons.star,
+                        color: Color(0xFF379777), size: 18),
                   ],
                 ),
               ],
@@ -619,14 +663,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               children: [
                 if (service.source.isNotEmpty) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
+                      color: isDark
+                          ? const Color(0xFF2A2A2A)
+                          : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       service.source,
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade700),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -635,10 +683,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   children: [
                     Text(
                       service.location,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade700),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.circle, color: Color(0xFF379777), size: 8),
+                    const Icon(Icons.circle,
+                        color: Color(0xFF379777), size: 8),
                   ],
                 ),
               ],
@@ -675,7 +725,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem('assets/icons/profile.svg', 'ملفي', 3),
-              _buildNavItem('assets/icons/Property 1=Component 2.svg', 'اكتشف', 2),
+              _buildNavItem(
+                  'assets/icons/Property 1=Component 2.svg', 'اكتشف', 2),
               _buildNavItem('assets/icons/Bookmark.svg', 'مشاويري', 1),
               _buildNavItem('assets/icons/home.svg', 'الرئيسية', 0),
             ],
@@ -695,7 +746,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFF379777).withOpacity(0.1) : Colors.transparent,
+          color: isActive
+              ? const Color(0xFF379777).withOpacity(0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -715,7 +768,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: isActive ? const Color(0xFF379777) : Colors.grey.shade600,
+                color:
+                    isActive ? const Color(0xFF379777) : Colors.grey.shade600,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
@@ -756,17 +810,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 }
 
-// =================== Helper widgets (unchanged) ===================
+// ============================================================
+//                      الأزرار والبطاقات المتحركة
+// ============================================================
+
 class _AnimatedButton extends StatefulWidget {
   final String text;
   final VoidCallback onTap;
   const _AnimatedButton({required this.text, required this.onTap});
+
   @override
   State<_AnimatedButton> createState() => _AnimatedButtonState();
 }
 
 class _AnimatedButtonState extends State<_AnimatedButton> {
   bool _isPressed = false;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -780,15 +839,19 @@ class _AnimatedButtonState extends State<_AnimatedButton> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: _isPressed ? const Color(0xFF379777) : const Color(0xFFB2E4D0),
+          color: _isPressed
+              ? const Color(0xFF379777)
+              : const Color(0xFFB2E4D0),
           borderRadius: BorderRadius.circular(10),
-          boxShadow: _isPressed ? [] : [
-            BoxShadow(
-              color: const Color(0xFF379777).withOpacity(0.25),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          boxShadow: _isPressed
+              ? []
+              : [
+                  BoxShadow(
+                    color: const Color(0xFF379777).withOpacity(0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
         ),
         child: Text(
           widget.text,
@@ -807,22 +870,29 @@ class _AnimatedCard extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry? margin;
+
   const _AnimatedCard({required this.child, this.onTap, this.margin});
+
   @override
   State<_AnimatedCard> createState() => _AnimatedCardState();
 }
 
 class _AnimatedCardState extends State<_AnimatedCard> {
   bool _isPressed = false;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: widget.onTap != null ? (_) => setState(() => _isPressed = true) : null,
-      onTapUp: widget.onTap != null ? (_) {
-        setState(() => _isPressed = false);
-        widget.onTap!();
-      } : null,
-      onTapCancel: widget.onTap != null ? () => setState(() => _isPressed = false) : null,
+      onTapDown:
+          widget.onTap != null ? (_) => setState(() => _isPressed = true) : null,
+      onTapUp: widget.onTap != null
+          ? (_) {
+              setState(() => _isPressed = false);
+              widget.onTap!();
+            }
+          : null,
+      onTapCancel:
+          widget.onTap != null ? () => setState(() => _isPressed = false) : null,
       child: AnimatedScale(
         scale: _isPressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 150),
@@ -851,13 +921,16 @@ class _AnimatedCardState extends State<_AnimatedCard> {
 class _ClickableServiceCard extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
+
   const _ClickableServiceCard({required this.child, required this.onTap});
+
   @override
   State<_ClickableServiceCard> createState() => _ClickableServiceCardState();
 }
 
 class _ClickableServiceCardState extends State<_ClickableServiceCard> {
   bool _isPressed = false;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(

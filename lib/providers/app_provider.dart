@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 // ==================== Models ====================
-
 class ServiceItem {
   final String id;
   final String title;
@@ -28,6 +29,21 @@ class ServiceItem {
     required this.views,
     this.isSaved = false,
   });
+
+  factory ServiceItem.fromJson(Map<String, dynamic> json) {
+    return ServiceItem(
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      title: json['title'] ?? '',
+      description: json['description'] ?? '',
+      category: json['category'] ?? '',
+      steps: json['steps']?.toString() ?? '(0 خطوات)',
+      author: json['author'] ?? '',
+      source: json['source'] ?? '',
+      rating: (json['rating'] ?? 0).toDouble(),
+      reviewCount: (json['reviewCount'] ?? 0).toInt(),
+      views: (json['views'] ?? 0).toInt(),
+    );
+  }
 }
 
 class Trip {
@@ -71,265 +87,41 @@ class TripStepData {
 }
 
 // ==================== Services Provider ====================
-
 class ServicesProvider with ChangeNotifier {
-  final Map<String, List<ServiceItem>> _categories = {
-    'الجيش': [
-      ServiceItem(
-        id: 'army_1',
-        title: 'استخراج شهادة الموقف من التجنيد',
-        description: 'احصل على شهادة موقفك من التجنيد بسهولة',
-        category: 'الجيش',
-        steps: '(4 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.7,
-        reviewCount: 8500,
-        views: 12500,
-      ),
-      ServiceItem(
-        id: 'army_2',
-        title: 'تأجيل التجنيد للدراسة',
-        description: 'تقديم طلب تأجيل التجنيد لاستكمال الدراسة',
-        category: 'الجيش',
-        steps: '(6 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.5,
-        reviewCount: 6200,
-        views: 8900,
-      ),
-      ServiceItem(
-        id: 'army_3',
-        title: 'الإعفاء من التجنيد',
-        description: 'معرفة شروط وإجراءات الإعفاء من الخدمة العسكرية',
-        category: 'الجيش',
-        steps: '(5 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.3,
-        reviewCount: 4800,
-        views: 6700,
-      ),
-      ServiceItem(
-        id: 'army_4',
-        title: 'التطوع في القوات المسلحة',
-        description: 'خطوات وشروط التقديم للتطوع في الجيش',
-        category: 'الجيش',
-        steps: '(8 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.6,
-        reviewCount: 3900,
-        views: 5400,
-      ),
-    ],
-    'التخرج الجامعي': [
-      ServiceItem(
-        id: 'grad_1',
-        title: 'استخراج شهادة التخرج',
-        description: 'الحصول على شهادة التخرج الجامعية',
-        category: 'التخرج الجامعي',
-        steps: '(5 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.8,
-        reviewCount: 11000,
-        views: 15200,
-      ),
-      ServiceItem(
-        id: 'grad_2',
-        title: 'توثيق الشهادة من الخارجية',
-        description: 'توثيق شهادتك الجامعية للعمل بالخارج',
-        category: 'التخرج الجامعي',
-        steps: '(7 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.6,
-        reviewCount: 7100,
-        views: 9800,
-      ),
-      ServiceItem(
-        id: 'grad_3',
-        title: 'استخراج كارنيه الخريجين',
-        description: 'الحصول على بطاقة خريجي الجامعات',
-        category: 'التخرج الجامعي',
-        steps: '(4 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.4,
-        reviewCount: 5200,
-        views: 7300,
-      ),
-      ServiceItem(
-        id: 'grad_4',
-        title: 'معادلة الشهادة',
-        description: 'معادلة الشهادات الجامعية من الخارج',
-        category: 'التخرج الجامعي',
-        steps: '(9 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.5,
-        reviewCount: 4400,
-        views: 6100,
-      ),
-    ],
-    'الزواج': [
-      ServiceItem(
-        id: 'marriage_1',
-        title: 'استخراج شهادة ميلاد للزواج',
-        description: 'الحصول على شهادة ميلاد مميكنة للزواج',
-        category: 'الزواج',
-        steps: '(3 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.9,
-        reviewCount: 13500,
-        views: 18700,
-      ),
-      ServiceItem(
-        id: 'marriage_2',
-        title: 'عقد القران',
-        description: 'خطوات إتمام عقد القران رسمياً',
-        category: 'الزواج',
-        steps: '(10 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.8,
-        reviewCount: 11700,
-        views: 16200,
-      ),
-      ServiceItem(
-        id: 'marriage_3',
-        title: 'توثيق عقد الزواج',
-        description: 'توثيق عقد الزواج في الشهر العقاري',
-        category: 'الزواج',
-        steps: '(6 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.7,
-        reviewCount: 9800,
-        views: 13500,
-      ),
-      ServiceItem(
-        id: 'marriage_4',
-        title: 'استخراج كتاب تحديد سن للزواج',
-        description: 'الحصول على كتاب تحديد السن من المحكمة',
-        category: 'الزواج',
-        steps: '(5 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.6,
-        reviewCount: 6800,
-        views: 9400,
-      ),
-    ],
-    'ترخيص السيارات': [
-      ServiceItem(
-        id: 'car_1',
-        title: 'تجديد رخصة السيارة',
-        description: 'تجديد رخصة تسيير السيارة السنوية',
-        category: 'ترخيص السيارات',
-        steps: '(5 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.7,
-        reviewCount: 16000,
-        views: 22100,
-      ),
-      ServiceItem(
-        id: 'car_2',
-        title: 'نقل ملكية السيارة',
-        description: 'إجراءات نقل ملكية المركبة',
-        category: 'ترخيص السيارات',
-        steps: '(8 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.5,
-        reviewCount: 10700,
-        views: 14800,
-      ),
-      ServiceItem(
-        id: 'car_3',
-        title: 'استخراج رخصة قيادة',
-        description: 'الحصول على رخصة قيادة جديدة',
-        category: 'ترخيص السيارات',
-        steps: '(12 خطوة)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.8,
-        reviewCount: 14100,
-        views: 19500,
-      ),
-      ServiceItem(
-        id: 'car_4',
-        title: 'فحص السيارة الدوري',
-        description: 'حجز موعد فحص السيارة السنوي',
-        category: 'ترخيص السيارات',
-        steps: '(4 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.6,
-        reviewCount: 8100,
-        views: 11200,
-      ),
-    ],
-    'السفر للخارج': [
-      ServiceItem(
-        id: 'travel_1',
-        title: 'استخراج جواز سفر جديد',
-        description: 'الحصول على جواز سفر مصري',
-        category: 'السفر للخارج',
-        steps: '(7 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.8,
-        reviewCount: 18500,
-        views: 25600,
-      ),
-      ServiceItem(
-        id: 'travel_2',
-        title: 'تجديد جواز السفر',
-        description: 'تجديد جواز السفر المنتهي',
-        category: 'السفر للخارج',
-        steps: '(6 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.7,
-        reviewCount: 13700,
-        views: 18900,
-      ),
-      ServiceItem(
-        id: 'travel_3',
-        title: 'استخراج فيزا شنغن',
-        description: 'خطوات الحصول على فيزا دول شنغن',
-        category: 'السفر للخارج',
-        steps: '(15 خطوة)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.5,
-        reviewCount: 12100,
-        views: 16700,
-      ),
-      ServiceItem(
-        id: 'travel_4',
-        title: 'تصريح السفر للخارج',
-        description: 'استخراج تصريح السفر للخارج',
-        category: 'السفر للخارج',
-        steps: '(5 خطوات)',
-        author: 'عمر وحيد',
-        source: 'مصدر موثوق',
-        rating: 4.6,
-        reviewCount: 8900,
-        views: 12300,
-      ),
-    ],
-  };
+  final Map<String, List<ServiceItem>> _categories = {};
+  bool _isLoading = false;
+  String? _errorMessage;
 
   Map<String, List<ServiceItem>> get categories => _categories;
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
-  List<ServiceItem> getServicesForCategory(String category) {
-    return _categories[category] ?? [];
+  Future<void> fetchServices(String token) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/services');
+      final response = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body)['data'] ?? json.decode(response.body);
+        final services = data.map((item) => ServiceItem.fromJson(item)).toList();
+
+        _categories.clear();
+        for (var service in services) {
+          _categories.putIfAbsent(service.category, () => []);
+          _categories[service.category]!.add(service);
+        }
+        _errorMessage = null;
+      } else {
+        _errorMessage = 'فشل تحميل الخدمات';
+      }
+    } catch (e) {
+      _errorMessage = 'خطأ في الاتصال';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   void toggleSaveService(String serviceId) {
@@ -344,26 +136,18 @@ class ServicesProvider with ChangeNotifier {
     }
   }
 
-  List<ServiceItem> get allServices {
-    List<ServiceItem> all = [];
-    for (var category in _categories.values) {
-      all.addAll(category);
-    }
-    return all;
+  List<ServiceItem> getServicesForCategory(String category) {
+    return _categories[category] ?? [];
   }
 
-  void addUserService(ServiceItem service) {
-    if (_categories.containsKey(service.category)) {
-      _categories[service.category]!.insert(0, service);
-    } else {
-      _categories[service.category] = [service];
-    }
+  void addServiceLocally(ServiceItem service) {
+    _categories.putIfAbsent(service.category, () => []);
+    _categories[service.category]!.insert(0, service);
     notifyListeners();
   }
 }
 
 // ==================== Trips Provider ====================
-
 class TripsProvider with ChangeNotifier {
   final List<Trip> _trips = [];
 

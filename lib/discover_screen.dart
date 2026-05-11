@@ -277,7 +277,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Widget _buildCategoryCard(ServiceCategory category) {
     return _AnimatedCategoryCard(
       onTap: () {
-        // الانتقال لصفحة الخدمات
         Navigator.push(
           context,
           MaterialPageRoute(
