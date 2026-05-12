@@ -9,6 +9,7 @@ import 'package:daleel/popular_services_screen.dart';
 import 'package:daleel/category_services_screen.dart';
 import 'package:daleel/notifications_screen.dart';
 import 'package:daleel/ai_chat_screen.dart';
+import 'package:daleel/service_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
@@ -33,6 +34,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   final List<PopularService> _popularServices = [
     PopularService(
+      id: 'popular_1',
       title: "شراء سيارة جديدة بالتقسيط",
       rating: 4.8,
       reviewCount: 10000,
@@ -41,6 +43,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       isFeatured: true,
     ),
     PopularService(
+      id: 'popular_2',
       title: "شراء سيارة جديدة بالتقسيط",
       rating: 4.8,
       reviewCount: 10000,
@@ -49,6 +52,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       isFeatured: true,
     ),
     PopularService(
+      id: 'popular_3',
       title: "شراء سيارة جديدة بالتقسيط",
       rating: 4.8,
       reviewCount: 10000,
@@ -61,12 +65,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // استدعاء الخدمات من الخادم بعد بناء الواجهة
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Trigger service loading after first frame
+    Future.microtask(() {
+      // ignore: use_build_context_synchronously
       final token = context.read<UserProvider>().user.token;
-      if (token != null && token.isNotEmpty) {
-        context.read<ServicesProvider>().fetchServices(token);
-      }
+      // ignore: use_build_context_synchronously
+      context.read<ServicesProvider>().fetchAndSetServices(token: token);
     });
   }
 
@@ -96,10 +100,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ جلب بيانات المستخدم من UserProvider
     final user = context.watch<UserProvider>().user;
-    // ✅ عرض الاسم: displayName (الذي قد يكون اسم المستخدم الحقيقي) أو "مستخدم"
-    final userName = user.displayName ?? 'مستخدم';
+    final userName = user.displayName ?? user.email?.split('@').first ?? 'مستخدم';
+    final servicesProvider = context.watch<ServicesProvider>();
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -112,13 +115,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             begin: const Offset(1.0, 0.0),
             end: Offset.zero,
           ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOut));
+
           return SlideTransition(position: offsetAnimation, child: child);
         },
         child: IndexedStack(
           key: ValueKey<int>(_selectedBottomIndex),
           index: _selectedBottomIndex,
           children: [
-            _buildHomeContent(userName),
+            servicesProvider.isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF379777),
+                    ),
+                  )
+                : _buildHomeContent(userName),
             const SaveScreen(),
             DiscoverScreen(userName: userName),
             const ProfileScreen(),
@@ -169,7 +179,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           Row(
             children: [
               Text(
-                userName,   // ⬅️ الاسم الديناميكي
+                userName,
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -462,7 +472,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildDiscoverSection(String userName) {
-    // خدمات Discover تأتي من Provider الذي تم تحديثه
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -614,7 +623,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return _AnimatedCard(
-      onTap: () {},
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ServiceDetailsScreen(
+              serviceTitle: service.title,
+              serviceDescription: service.location,
+              steps: ServiceDetailsData.getStepsForService(service.title),
+              comments: ServiceDetailsData.getMockComments(),
+              serviceId: service.id,
+            ),
+          ),
+        );
+      },
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -811,7 +833,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 }
 
 // ============================================================
-//                      الأزرار والبطاقات المتحركة
+//                      Helper animated widgets
 // ============================================================
 
 class _AnimatedButton extends StatefulWidget {
@@ -883,16 +905,18 @@ class _AnimatedCardState extends State<_AnimatedCard> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown:
-          widget.onTap != null ? (_) => setState(() => _isPressed = true) : null,
+      onTapDown: widget.onTap != null
+          ? (_) => setState(() => _isPressed = true)
+          : null,
       onTapUp: widget.onTap != null
           ? (_) {
               setState(() => _isPressed = false);
               widget.onTap!();
             }
           : null,
-      onTapCancel:
-          widget.onTap != null ? () => setState(() => _isPressed = false) : null,
+      onTapCancel: widget.onTap != null
+          ? () => setState(() => _isPressed = false)
+          : null,
       child: AnimatedScale(
         scale: _isPressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 150),
@@ -966,6 +990,7 @@ class _ClickableServiceCardState extends State<_ClickableServiceCard> {
 }
 
 class PopularService {
+  final String id;
   final String title;
   final double rating;
   final int reviewCount;
@@ -974,6 +999,7 @@ class PopularService {
   final bool isFeatured;
 
   PopularService({
+    required this.id,
     required this.title,
     required this.rating,
     required this.reviewCount,

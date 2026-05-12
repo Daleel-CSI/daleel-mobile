@@ -4,27 +4,27 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:daleel/providers/app_provider.dart';
 import 'package:daleel/providers/user_provider.dart';
-import 'service_details_screen.dart';
+import 'package:daleel/service_details_screen.dart';
 
-class PopularServicesScreen extends StatefulWidget {
-  const PopularServicesScreen({super.key});
+class PendingServicesScreen extends StatefulWidget {
+  const PendingServicesScreen({super.key});
 
   @override
-  State<PopularServicesScreen> createState() => _PopularServicesScreenState();
+  State<PendingServicesScreen> createState() => _PendingServicesScreenState();
 }
 
-class _PopularServicesScreenState extends State<PopularServicesScreen> {
-  List<ServiceItem> _popularServices = [];
+class _PendingServicesScreenState extends State<PendingServicesScreen> {
+  List<ServiceItem> _pendingServices = [];
   bool _isLoading = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _fetchPopular();
+    _fetchPendingServices();
   }
 
-  Future<void> _fetchPopular() async {
+  Future<void> _fetchPendingServices() async {
     final token = context.read<UserProvider>().user.token;
     if (token == null) {
       setState(() => _error = 'يجب تسجيل الدخول أولاً');
@@ -37,7 +37,7 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
     });
 
     try {
-      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/services/popular');
+      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/services/pending');
       final response = await http.get(
         url,
         headers: {'Authorization': 'Bearer $token'},
@@ -50,12 +50,12 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
             : (decoded['data'] is List ? decoded['data'] : <dynamic>[]);
 
         setState(() {
-          _popularServices = dataList
+          _pendingServices = dataList
               .map((item) => ServiceItem.fromJson(item as Map<String, dynamic>))
               .toList();
         });
       } else {
-        setState(() => _error = 'فشل تحميل الخدمات الشائعة');
+        setState(() => _error = 'فشل تحميل الخدمات المعلقة');
       }
     } catch (e) {
       setState(() => _error = 'خطأ في الاتصال');
@@ -85,19 +85,19 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
                               Text(_error!, style: const TextStyle(fontSize: 16)),
                               const SizedBox(height: 12),
                               ElevatedButton(
-                                onPressed: _fetchPopular,
+                                onPressed: _fetchPendingServices,
                                 child: const Text('إعادة المحاولة'),
                               ),
                             ],
                           ),
                         )
-                      : _popularServices.isEmpty
-                          ? const Center(child: Text('لا توجد خدمات شائعة حالياً'))
+                      : _pendingServices.isEmpty
+                          ? const Center(child: Text('لا توجد خدمات معلقة حالياً'))
                           : ListView.builder(
                               padding: const EdgeInsets.symmetric(horizontal: 24),
-                              itemCount: _popularServices.length,
+                              itemCount: _pendingServices.length,
                               itemBuilder: (context, index) {
-                                return _buildServiceCard(_popularServices[index]);
+                                return _buildServiceCard(_pendingServices[index]);
                               },
                             ),
             ),
@@ -119,7 +119,7 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
           const Expanded(child: SizedBox()),
           Center(
             child: Text(
-              'الأكثر شيوعاً',
+              'الخدمات المعلقة',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,

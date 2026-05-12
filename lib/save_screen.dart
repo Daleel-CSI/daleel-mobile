@@ -1,10 +1,11 @@
-import 'package:daleel/providers/app_provider.dart';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:provider/provider.dart';
-import 'service_details_screen.dart';
-import 'dart:ui';
-
+import 'package:daleel/api/api_service.dart';            // لاستدعاء API الحذف
+import 'package:daleel/providers/app_provider.dart';
+import 'package:daleel/providers/user_provider.dart';     // للحصول على التوكن
+import 'package:daleel/service_details_screen.dart';
 
 class SaveScreen extends StatefulWidget {
   const SaveScreen({super.key});
@@ -14,6 +15,8 @@ class SaveScreen extends StatefulWidget {
 }
 
 class _SaveScreenState extends State<SaveScreen> {
+  bool _isDeleting = false;   // لمؤشر التحميل أثناء الحذف
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -26,13 +29,14 @@ class _SaveScreenState extends State<SaveScreen> {
               child: Consumer<TripsProvider>(
                 builder: (context, tripsProvider, child) {
                   final trips = tripsProvider.savedTrips;
-                  
+
                   if (trips.isEmpty) {
                     return _buildEmptyState();
                   }
-                  
+
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     itemCount: trips.length,
                     itemBuilder: (context, index) {
                       return _buildTripCard(trips[index], index);
@@ -77,7 +81,7 @@ class _SaveScreenState extends State<SaveScreen> {
               color: const Color(0xFF379777).withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child:SvgPicture.asset(
+            child: SvgPicture.asset(
               'assets/icons/Bookmark.svg',
               color: Color(0xFF379777),
             ),
@@ -106,12 +110,12 @@ class _SaveScreenState extends State<SaveScreen> {
 
   Widget _buildTripCard(Trip trip, int index) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // جلب الخطوات الفعلية للخدمة
     final actualSteps = ServiceDetailsData.getStepsForService(trip.title);
     final totalSteps = actualSteps.length;
     final completedSteps = actualSteps.where((step) => step.isCompleted).length;
-    
+
     return _AnimatedCard(
       onTap: () {
         // فتح تفاصيل الخدمة
@@ -123,6 +127,7 @@ class _SaveScreenState extends State<SaveScreen> {
               serviceDescription: trip.category,
               steps: actualSteps,
               comments: ServiceDetailsData.getMockComments(),
+              serviceId: trip.id,   // المعرف الفريد للمشوار
             ),
           ),
         );
@@ -147,8 +152,8 @@ class _SaveScreenState extends State<SaveScreen> {
                           width: 60,
                           height: 60,
                           child: CircularProgressIndicator(
-                            value: totalSteps > 0 
-                                ? completedSteps / totalSteps 
+                            value: totalSteps > 0
+                                ? completedSteps / totalSteps
                                 : 0.0,
                             strokeWidth: 5,
                             backgroundColor: const Color(0xFFE8F5E9),
@@ -184,7 +189,8 @@ class _SaveScreenState extends State<SaveScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).textTheme.bodyLarge?.color,
+                            color:
+                                Theme.of(context).textTheme.bodyLarge?.color,
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -206,9 +212,12 @@ class _SaveScreenState extends State<SaveScreen> {
 
             // الخطوة الحالية
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
+                color: isDark
+                    ? const Color(0xFF2A2A2A)
+                    : const Color(0xFFF5F5F5),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -224,7 +233,6 @@ class _SaveScreenState extends State<SaveScreen> {
                         'assets/icons/bookmark-minus-02.svg',
                         width: 18,
                         height: 18,
-                        
                       ),
                     ),
                   ),
@@ -234,7 +242,11 @@ class _SaveScreenState extends State<SaveScreen> {
                       textAlign: TextAlign.right,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Theme.of(context).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.color
+                            ?.withOpacity(0.6),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -248,182 +260,241 @@ class _SaveScreenState extends State<SaveScreen> {
     );
   }
 
+  // ========== مربع حوار الحذف مع ربط DELETE API ==========
   void _showDeleteDialog(Trip trip) {
     showDialog(
       context: context,
-      barrierDismissible: true, // يقفل لما يضغط برا
-      barrierColor: Colors.black.withOpacity(0.3), // خلفية شفافة للـ blur
-      builder: (context) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), // تأثير الضبابية
-        child: AlertDialog(
-          backgroundColor: Theme.of(context).cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(
-              color: const Color(0xFF379777).withOpacity(0.1),
-              width: 1,
-            ),
-          ),
-          contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          title: Column(
-            children: [
-              // أيقونة تحذير بلون التطبيق
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.red.shade500,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'حذف المشوار',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).textTheme.bodyLarge?.color,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'هل أنت متأكد من حذف هذا المشوار؟',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'لن تتمكن من استرجاعه مرة أخرى',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade500,
-                ),
-              ),
-            ],
-          ),
-          actionsPadding: const EdgeInsets.all(20),
-          actions: [
-            Row(
-              children: [
-                // زر الإلغاء
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: const Color(0xFF379777).withOpacity(0.1),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'إلغاء',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF379777),
-                      ),
-                    ),
+      barrierDismissible: !_isDeleting,  // لا يُغلق أثناء الحذف
+      barrierColor: Colors.black.withOpacity(0.3),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: AlertDialog(
+                backgroundColor: Theme.of(context).cardColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: BorderSide(
+                    color: const Color(0xFF379777).withOpacity(0.1),
+                    width: 1,
                   ),
                 ),
-                const SizedBox(width: 12),
-                // زر الحذف
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Provider.of<TripsProvider>(context, listen: false).removeTrip(trip.id);
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.check_circle, color: Colors.white, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                'تم حذف المشوار',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                            ],
+                contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                title: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.red.shade500,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'حذف المشوار',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                    ),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'هل أنت متأكد من حذف هذا المشوار؟',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'لن تتمكن من استرجاعه مرة أخرى',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                    if (_isDeleting) ...[
+                      const SizedBox(height: 16),
+                      const CircularProgressIndicator(
+                          color: Color(0xFF379777)),
+                    ],
+                  ],
+                ),
+                actionsPadding: const EdgeInsets.all(20),
+                actions: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed:
+                              _isDeleting ? null : () => Navigator.pop(ctx),
+                          style: TextButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor:
+                                const Color(0xFF379777).withOpacity(0.1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          backgroundColor: const Color(0xFF379777),
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 2),
-                          margin: const EdgeInsets.all(16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          child: const Text(
+                            'إلغاء',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF379777),
+                            ),
                           ),
                         ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: Colors.red.shade500,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ),
-                    child: const Text(
-                      'حذف',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isDeleting
+                              ? null
+                              : () => _deleteTrip(ctx, trip, setDialogState),
+                          style: ElevatedButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: Colors.red.shade500,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'حذف',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
+
+  Future<void> _deleteTrip(
+    BuildContext dialogContext,
+    Trip trip,
+    StateSetter setDialogState,
+  ) async {
+    setDialogState(() => _isDeleting = true);
+
+    // استدعاء DELETE من الخادم
+    final token = context.read<UserProvider>().user.token;
+    final success = await ApiService.deleteService(
+      serviceId: trip.id,
+      token: token,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      // حذف من القائمة المحلية
+      Provider.of<TripsProvider>(context, listen: false)
+          .removeTrip(trip.id);
+      // ignore: use_build_context_synchronously
+      Navigator.pop(dialogContext); // إغلاق الحوار
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.check_circle, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'تم حذف المشوار بنجاح',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF379777),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } else {
+      setDialogState(() => _isDeleting = false); // نعطي فرصة للإعادة
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('فشل حذف المشوار من الخادم، حاول مجدداً'),
+          backgroundColor: Colors.red.shade500,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
 }
+
+// ═══════════════════════════════════════════════════════════
+//  AnimatedCard helper
+// ═══════════════════════════════════════════════════════════
 
 class _AnimatedCard extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry? margin;
-  
+
   const _AnimatedCard({
     required this.child,
     this.onTap,
     this.margin,
   });
-  
+
   @override
   State<_AnimatedCard> createState() => _AnimatedCardState();
 }
 
 class _AnimatedCardState extends State<_AnimatedCard> {
   bool _isPressed = false;
-  
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: widget.onTap != null ? (_) => setState(() => _isPressed = true) : null,
-      onTapUp: widget.onTap != null ? (_) {
-        setState(() => _isPressed = false);
-        widget.onTap!();
-      } : null,
-      onTapCancel: widget.onTap != null ? () => setState(() => _isPressed = false) : null,
+      onTapDown: widget.onTap != null
+          ? (_) => setState(() => _isPressed = true)
+          : null,
+      onTapUp: widget.onTap != null
+          ? (_) {
+              setState(() => _isPressed = false);
+              widget.onTap!();
+            }
+          : null,
+      onTapCancel: widget.onTap != null
+          ? () => setState(() => _isPressed = false)
+          : null,
       child: AnimatedScale(
         scale: _isPressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 150),
@@ -434,7 +505,7 @@ class _AnimatedCardState extends State<_AnimatedCard> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: _isPressed 
+                color: _isPressed
                     ? const Color(0xFF379777).withOpacity(0.2)
                     : Colors.black.withOpacity(0.08),
                 blurRadius: _isPressed ? 16 : 12,

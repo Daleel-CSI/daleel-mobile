@@ -185,6 +185,7 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen>
               serviceDescription: service.description,
               steps: ServiceDetailsData.getStepsForService(service.title),
               comments: ServiceDetailsData.getMockComments(),
+               serviceId: service.id,
             ),
           ),
         );

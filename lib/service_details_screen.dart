@@ -1,15 +1,16 @@
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:daleel/api/api_service.dart';
 import 'package:daleel/providers/user_provider.dart';
 import 'package:provider/provider.dart';
 
+// ===================== Main Screen =====================
 class ServiceDetailsScreen extends StatefulWidget {
   final String serviceTitle;
   final String serviceDescription;
   final List<ServiceStep> steps;
   final List<MemberComment> comments;
+  final String serviceId;
 
   const ServiceDetailsScreen({
     super.key,
@@ -17,6 +18,7 @@ class ServiceDetailsScreen extends StatefulWidget {
     required this.serviceDescription,
     required this.steps,
     required this.comments,
+    required this.serviceId,
   });
 
   @override
@@ -26,71 +28,153 @@ class ServiceDetailsScreen extends StatefulWidget {
 class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
   final List<bool> _expandedSteps = [];
   final List<bool> _completedSteps = [];
+  bool _isApproving = false;
+  bool _isRejecting = false;
+
+  // ----- التعليقات المحملة من الخادم -----
+  List<MemberComment> _comments = [];
+  bool _isLoadingComments = false;
+  String? _commentsError;
+  
+  // ----- التصويت -----
+  bool _isVoting = false;
 
   @override
   void initState() {
     super.initState();
     _expandedSteps.addAll(List.generate(widget.steps.length, (_) => false));
     _completedSteps.addAll(widget.steps.map((step) => step.isCompleted).toList());
-    // جلب أعداد التصويت الأولية لجميع التعليقات
-    _loadInitialVotes();
+    _fetchComments();
   }
 
-  Future<void> _loadInitialVotes() async {
-    for (var comment in widget.comments) {
-      final votes = await _fetchVoteCount(comment.id);
-      if (mounted) {
-        setState(() {
-          comment.upVotes = votes['up']!;
-          comment.downVotes = votes['down']!;
-        });
-      }
+  Future<void> _fetchComments() async {
+    final token = context.read<UserProvider>().user.token;
+    setState(() {
+      _isLoadingComments = true;
+      _commentsError = null;
+    });
+
+    final votesJson = await ApiService.getVotes(
+      serviceId: widget.serviceId,
+      token: token,
+    );
+
+    if (!mounted) return;
+
+    if (votesJson != null) {
+      setState(() {
+        _comments = votesJson.map((json) => MemberComment(
+          userName: json['userName'] ?? json['username'] ?? 'مستخدم',
+          text: json['text'] ?? json['comment'] ?? '',
+          date: json['date'] ?? '',
+          upVotes: (json['upVotes'] as num?)?.toInt() ?? 0,
+          downVotes: (json['downVotes'] as num?)?.toInt() ?? 0,
+        )).toList();
+        _isLoadingComments = false;
+      });
+    } else {
+      setState(() {
+        _commentsError = 'فشل تحميل التعليقات';
+        _isLoadingComments = false;
+      });
     }
   }
 
-  // -------------------------------------------------------
-  // API calls for votes
-  // -------------------------------------------------------
-  Future<Map<String, int>> _fetchVoteCount(String commentId) async {
+  Future<void> _toggleStep(int index) async {
+    setState(() {
+      _completedSteps[index] = !_completedSteps[index];
+    });
+
+    final stepsData = <Map<String, dynamic>>[];
+    for (int i = 0; i < widget.steps.length; i++) {
+      stepsData.add({
+        'title': widget.steps[i].title,
+        'completed': _completedSteps[i],
+      });
+    }
+
     final token = context.read<UserProvider>().user.token;
-    if (token == null) return {'up': 0, 'down': 0};
-    try {
-      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/votes/$commentId');
-      final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body);
-        return {
-          'up': (data['upvotes'] ?? 0).toInt(),
-          'down': (data['downvotes'] ?? 0).toInt(),
-        };
-      }
-    } catch (_) {}
-    return {'up': 0, 'down': 0};
+    await ApiService.updateService(
+      serviceId: widget.serviceId,
+      data: {'steps': stepsData},
+      token: token,
+    );
   }
 
-  Future<void> _submitVote(String commentId, String type) async {
+  Future<void> _approveService() async {
+    setState(() => _isApproving = true);
     final token = context.read<UserProvider>().user.token;
-    if (token == null) return;
-    try {
-      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/votes/$commentId');
-      await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'vote': type}),
+    final ok = await ApiService.approveService(
+      serviceId: widget.serviceId,
+      token: token,
+    );
+    setState(() => _isApproving = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ok ? 'تمت الموافقة على الخدمة ✅' : 'فشلت الموافقة'),
+          backgroundColor: ok ? const Color(0xFF379777) : Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
       );
-    } catch (_) {}
+    }
   }
 
-  // -------------------------------------------------------
-  // UI
-  // -------------------------------------------------------
+  Future<void> _rejectService() async {
+    setState(() => _isRejecting = true);
+    final token = context.read<UserProvider>().user.token;
+    final ok = await ApiService.rejectService(
+      serviceId: widget.serviceId,
+      token: token,
+    );
+    setState(() => _isRejecting = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ok ? 'تم رفض الخدمة ❌' : 'فشلت العملية'),
+          backgroundColor: ok ? Colors.orange : Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+  
+  // ----- دالة التصويت -----
+  Future<void> _handleVote(String type) async {
+    if (_isVoting) return;
+    setState(() => _isVoting = true);
+    
+    final token = context.read<UserProvider>().user.token;
+    final ok = await ApiService.postVote(
+      serviceId: widget.serviceId,
+      type: type,
+      token: token,
+    );
+    
+    setState(() => _isVoting = false);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ok ? 'تم التصويت بنجاح' : 'فشل التصويت'),
+          backgroundColor: ok ? const Color(0xFF379777) : Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      // تحديث التعليقات بعد التصويت
+      if (ok) _fetchComments();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
@@ -104,8 +188,6 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     const SizedBox(height: 20),
-
-                    // الـ Holiday Badge
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -117,64 +199,77 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                           ),
                           child: const Text(
                             'عطلة رسمية',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFFE65100),
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: TextStyle(fontSize: 13, color: Color(0xFFE65100), fontWeight: FontWeight.w600),
                           ),
                         ),
-                        Text(
-                          'اليوم الجمعة 1 مايو',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Theme.of(context).textTheme.bodyLarge?.color,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          children: [
+                            // أزرار التصويت
+                            _buildVoteButtons(),
+                            const SizedBox(width: 8),
+                            Text(
+                              'اليوم الجمعة 1 مايو',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Theme.of(context).textTheme.bodyLarge?.color,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 20),
-
-                    // العنوان والوصف
                     Text(
                       widget.serviceTitle,
                       textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       widget.serviceDescription,
                       textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade500,
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // الخطوات
                     ...widget.steps.asMap().entries.map((entry) {
                       return _buildStepItem(entry.value, entry.key, isDark);
                     }),
-
                     const SizedBox(height: 24),
                   ],
                 ),
               ),
             ),
-
-            // زر مشاركة الأعضاء في الأسفل
             _buildMembersButton(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildVoteButtons() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _isVoting
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
+            : IconButton(
+                icon: const Icon(Icons.arrow_upward, color: Color(0xFF379777), size: 20),
+                onPressed: () => _handleVote('up'),
+                tooltip: 'تصويت بالموافقة',
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+        _isVoting
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
+            : IconButton(
+                icon: Icon(Icons.arrow_downward, color: Colors.red.shade600, size: 20),
+                onPressed: () => _handleVote('down'),
+                tooltip: 'تصويت بالرفض',
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+      ],
     );
   }
 
@@ -185,40 +280,53 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.arrow_back_ios,
-              color: Color(0xFF379777),
-              size: 24,
-            ),
+            icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF379777), size: 24),
           ),
-          const Expanded(child: SizedBox()), 
+          const Expanded(child: SizedBox()),
           Text(
             'تفاصيل الخدمة',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).textTheme.bodyLarge?.color,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color),
           ),
-          const Expanded(child: SizedBox()), 
+          const Expanded(child: SizedBox()),
+          _buildAdminActions(),
         ],
       ),
     );
   }
 
+  Widget _buildAdminActions() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _isRejecting
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
+            : IconButton(
+                icon: Icon(Icons.cancel_outlined, color: Colors.red.shade600, size: 24),
+                onPressed: _rejectService,
+                tooltip: 'رفض الخدمة',
+              ),
+        const SizedBox(width: 8),
+        _isApproving
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
+            : IconButton(
+                icon: const Icon(Icons.check_circle_outline, color: Color(0xFF379777), size: 24),
+                onPressed: _approveService,
+                tooltip: 'موافقة على الخدمة',
+              ),
+      ],
+    );
+  }
+
   Widget _buildStepItem(ServiceStep step, int index, bool isDark) {
     final isExpanded = _expandedSteps[index];
-    final isCompleted = _completedSteps[index]; 
+    final isCompleted = _completedSteps[index];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-          width: 0.8,
-        ),
+        border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200, width: 0.8),
       ),
       child: Column(
         children: [
@@ -240,7 +348,6 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                     color: Colors.grey.shade500,
                     size: 22,
                   ),
-
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -253,32 +360,21 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: isCompleted
-                                  ? Theme.of(context).textTheme.bodyLarge?.color
-                                  : Colors.grey.shade500,
+                              color: isCompleted ? Theme.of(context).textTheme.bodyLarge?.color : Colors.grey.shade500,
                             ),
                           ),
                           const SizedBox(height: 3),
                           Text(
                             step.location,
                             textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                            ),
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                           ),
                         ],
                       ),
                     ),
                   ),
-
-                  // الـ status circle يمين - قابل للضغط
                   GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _completedSteps[index] = !_completedSteps[index];
-                      });
-                    },
+                    onTap: () => _toggleStep(index),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 24,
@@ -296,9 +392,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                         ),
                       ),
                       child: isCompleted
-                          ? const Center(
-                              child: Icon(Icons.check, color: Colors.white, size: 14),
-                            )
+                          ? const Center(child: Icon(Icons.check, color: Colors.white, size: 14))
                           : null,
                     ),
                   ),
@@ -306,16 +400,13 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
               ),
             ),
           ),
-
           AnimatedSize(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeInOut,
             child: isExpanded
                 ? Container(
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF2A2A2A)
-                          : const Color(0xFFF9F9F9),
+                      color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF9F9F9),
                       borderRadius: const BorderRadius.only(
                         bottomLeft: Radius.circular(12),
                         bottomRight: Radius.circular(12),
@@ -325,57 +416,19 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // الوصف
-                        Text(
-                          step.description,
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
-                            height: 1.6,
-                          ),
-                        ),
-
-                        // المستندات المطلوبة
+                        Text(step.description, textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.6)),
                         if (step.requiredDocs != null && step.requiredDocs!.isNotEmpty) ...[
                           const SizedBox(height: 14),
-                          Text(
-                            'المستندات المطلوبة',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).textTheme.bodyLarge?.color,
-                            ),
-                          ),
+                          Text('المستندات المطلوبة', textAlign: TextAlign.right, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color)),
                           const SizedBox(height: 6),
-                          ...step.requiredDocs!.map(
-                            (doc) => Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(
-                                doc,
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                          ),
+                          ...step.requiredDocs!.map((doc) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(doc, textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                              )),
                         ],
-
-                        // ملاحظة
                         if (step.note != null) ...[
                           const SizedBox(height: 10),
-                          Text(
-                            step.note!,
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
+                          Text(step.note!, textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontStyle: FontStyle.italic)),
                         ],
                       ],
                     ),
@@ -391,13 +444,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 16, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
         child: Padding(
@@ -405,16 +452,14 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'تم التحديث 27 مارس',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade500,
-                ),
-              ),
+              Text('تم التحديث 27 مارس', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
               InkWell(
                 onTap: () {
-                  _showMembersBottomSheet();
+                  if (!_isLoadingComments && _commentsError == null) {
+                    _showMembersBottomSheet();
+                  } else if (_commentsError != null) {
+                    _fetchComments();
+                  }
                 },
                 borderRadius: BorderRadius.circular(24),
                 child: Container(
@@ -422,19 +467,16 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF379777).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: const Color(0xFF379777).withOpacity(0.3),
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: const Color(0xFF379777).withOpacity(0.3), width: 1.5),
                   ),
-                  child: Text(
-                    'مشاركات الأعضاء (${widget.comments.length})',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF379777),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: _isLoadingComments
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
+                      : _commentsError != null
+                          ? Text('فشل التحميل - اضغط لإعادة', style: TextStyle(color: Colors.red.shade600, fontSize: 11))
+                          : Text(
+                              'مشاركات الأعضاء (${_comments.length})',
+                              style: const TextStyle(fontSize: 14, color: Color(0xFF379777), fontWeight: FontWeight.w600),
+                            ),
                 ),
               ),
             ],
@@ -449,453 +491,13 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return _MembersBottomSheet(comments: widget.comments);
-      },
-    );
-  }
-
-  // -------------------------------------------------------
-  // تعليق مع أزرار تصويت حقيقية
-  // -------------------------------------------------------
-  // ignore: unused_element
-  Widget _buildCommentItem(MemberComment comment, int index, bool isDark) {
-    return StatefulBuilder(
-      builder: ( BuildContext context, StateSetter setLocalState) {
-        bool isUpLoading = false;
-        bool isDownLoading = false;
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // ── أزرار التصويت ──
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: isDownLoading
-                            // ignore: dead_code
-                            ? null
-                            : () async {
-                                setLocalState(() => isDownLoading = true);
-                                await _submitVote(comment.id, 'down');
-                                final votes = await _fetchVoteCount(comment.id);
-                                setState(() {
-                                  comment.downVotes = votes['down']!;
-                                  comment.upVotes = votes['up']!;
-                                });
-                                setLocalState(() => isDownLoading = false);
-                              },
-                        child: Row(children: [
-                          Text(comment.downVotes.toString(),
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.red.shade400,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 2),
-                          Icon(Icons.arrow_downward,
-                              color: Colors.red.shade400, size: 14),
-                        ]),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: isUpLoading
-                            // ignore: dead_code
-                            ? null
-                            : () async {
-                                setLocalState(() => isUpLoading = true);
-                                await _submitVote(comment.id, 'up');
-                                final votes = await _fetchVoteCount(comment.id);
-                                setState(() {
-                                  comment.upVotes = votes['up']!;
-                                  comment.downVotes = votes['down']!;
-                                });
-                                setLocalState(() => isUpLoading = false);
-                              },
-                        child: Row(children: [
-                          Icon(Icons.arrow_upward,
-                              color: const Color(0xFF379777), size: 14),
-                          const SizedBox(width: 2),
-                          Text(comment.upVotes.toString(),
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF379777),
-                                  fontWeight: FontWeight.bold)),
-                        ]),
-                      ),
-                    ],
-                  ),
-                  // معلومات المستخدم
-                  Row(children: [
-                    Text(comment.date,
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade500)),
-                    const SizedBox(width: 8),
-                    Text(comment.userName,
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.color)),
-                  ]),
-                ],
-              ),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onLongPress: () => _showCommentActions(index),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF379777).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(comment.text,
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.color,
-                          height: 1.5)),
-                ),
-              ),
-              const SizedBox(height: 4),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // ════════════════ أزرار القائمة للإبلاغ إلخ ════════════════
-  void _showCommentActions(int index) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
-      barrierDismissible: true,
-      builder: (context) {
-        return GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: Container(
-              color: Colors.transparent,
-              child: Align(
-                alignment: Alignment.center,
-                child: GestureDetector(
-                  onTap: () {}, 
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.15),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.arrow_upward,
-                                          color: Color(0xFF379777), size: 14),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        '${widget.comments[index].upVotes}',
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF379777),
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        widget.comments[index].date,
-                                        style: TextStyle(
-                                            fontSize: 12, color: Colors.grey.shade500),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        widget.comments[index].userName,
-                                        style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF379777).withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  widget.comments[index].text,
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.black87,
-                                      height: 1.5),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 48),
-                        child: Material(
-                          borderRadius: BorderRadius.circular(16),
-                          elevation: 10,
-                          child: Container(
-                            width: 200,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      // لا نعدل مباشرة، نضغط فقط
-                                    });
-                                    Navigator.pop(context);
-                                  },
-                                  borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(16),
-                                      topRight: Radius.circular(16)),
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                        vertical: 14, horizontal: 24),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Icon(Icons.arrow_upward,
-                                            color: Color(0xFF379777), size: 20),
-                                        Text('أوافق',
-                                            style: TextStyle(
-                                                fontSize: 15,
-                                                color: Color(0xFF379777),
-                                                fontWeight: FontWeight.w600)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                Divider(height: 1, color: Colors.grey.shade200),
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {});
-                                    Navigator.pop(context);
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 14, horizontal: 24),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Icon(Icons.arrow_downward,
-                                            color: Colors.red.shade400, size: 20),
-                                        Text('لا أوافق',
-                                            style: TextStyle(
-                                                fontSize: 15,
-                                                color: Colors.red.shade400,
-                                                fontWeight: FontWeight.w600)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                Divider(height: 1, color: Colors.grey.shade200),
-                                InkWell(
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _showReportSheet();
-                                  },
-                                  borderRadius: const BorderRadius.only(
-                                      bottomLeft: Radius.circular(16),
-                                      bottomRight: Radius.circular(16)),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 14, horizontal: 24),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Icon(Icons.flag_outlined,
-                                            color: Colors.orange.shade600, size: 20),
-                                        Text('ابلاغ',
-                                            style: TextStyle(
-                                                fontSize: 15,
-                                                color: Colors.orange.shade600,
-                                                fontWeight: FontWeight.w600)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showReportSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return const _ReportBottomSheet();
-      },
-    );
-  }
-
-  // ignore: unused_element
-  Widget _buildAddCommentField(bool isDark) {
-    // ignore: no_leading_underscores_for_local_identifiers
-    final TextEditingController _commentController = TextEditingController();
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 16, 24, 16 + MediaQuery.of(context).viewInsets.bottom),
-        child: Row(
-          children: [
-            InkWell(
-              onTap: () {
-                if (_commentController.text.trim().isNotEmpty) {
-                  setState(() {
-                    widget.comments.insert(
-                      0,
-                      MemberComment(
-                        id: 'temp_${DateTime.now().millisecondsSinceEpoch}', // مؤقت
-                        userName: 'أنت',
-                        text: _commentController.text.trim(),
-                        date: 'الآن',
-                        upVotes: 0,
-                        downVotes: 0,
-                      ),
-                    );
-                    _commentController.clear();
-                  });
-                }
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF379777),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.add,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                height: 44,
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  controller: _commentController,
-                  textAlign: TextAlign.right,
-                  cursorColor: const Color(0xFF379777),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'اضافة مشاركة',
-                    hintStyle: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 14,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.expand_less,
-              color: Colors.grey.shade500,
-              size: 22,
-            ),
-          ],
-        ),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => _MembersBottomSheet(comments: _comments),
     );
   }
 }
 
-// ════════════════ Bottom Sheet للأعضاء ════════════════
+// ===================== Members Bottom Sheet =====================
 class _MembersBottomSheet extends StatefulWidget {
   final List<MemberComment> comments;
   const _MembersBottomSheet({required this.comments});
@@ -929,8 +531,7 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
           const SizedBox(height: 8),
           Container(
             width: 40, height: 4,
-            decoration: BoxDecoration(
-                color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2)),
           ),
           const SizedBox(height: 16),
           Padding(
@@ -939,9 +540,10 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Icon(Icons.expand_more, color: Colors.grey.shade500),
-                Text('مشاركات الأعضاء (${_comments.length})',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.bodyLarge?.color)),
+                Text(
+                  'مشاركات الأعضاء (${_comments.length})',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color),
+                ),
               ],
             ),
           ),
@@ -950,9 +552,7 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               itemCount: _comments.length,
-              itemBuilder: (context, index) {
-                return _buildCommentItem(_comments[index], index, isDark);
-              },
+              itemBuilder: (context, index) => _buildCommentItem(_comments[index], index, isDark),
             ),
           ),
           _buildAddCommentField(isDark),
@@ -962,10 +562,218 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
   }
 
   Widget _buildCommentItem(MemberComment comment, int index, bool isDark) {
-    // نعيد استخدام نفس عنصر التعليق مع التصويت من الصفحة الرئيسية
-    // لكننا سنعيد تعريفه هنا لتجنب التعارض، بنفس الكود السابق.
-    // سأكتبه بشكل مختصر لكنه مطابق لما بالأعلى.
-    return const SizedBox.shrink(); // تجنباً للتكرار، لكن يفضل استدعاء widget منفصل
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(comment.downVotes.toString(), style: TextStyle(fontSize: 12, color: Colors.red.shade400, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 2),
+                  Icon(Icons.arrow_downward, color: Colors.red.shade400, size: 14),
+                  const SizedBox(width: 8),
+                  Icon(Icons.arrow_upward, color: const Color(0xFF379777), size: 14),
+                  const SizedBox(width: 2),
+                  Text(comment.upVotes.toString(), style: const TextStyle(fontSize: 12, color: Color(0xFF379777), fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Row(
+                children: [
+                  Text(comment.date, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                  const SizedBox(width: 8),
+                  Text(comment.userName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onLongPress: () => _showCommentActions(index),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF379777).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                comment.text,
+                textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodyLarge?.color, height: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+
+  void _showCommentActions(int index) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      barrierDismissible: true,
+      builder: (context) {
+        return GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              color: Colors.transparent,
+              child: Align(
+                alignment: Alignment.center,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 4))],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.arrow_upward, color: Color(0xFF379777), size: 14),
+                                      const SizedBox(width: 2),
+                                      Text(_comments[index].upVotes.toString(), style: const TextStyle(fontSize: 12, color: Color(0xFF379777), fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  Row(
+                                    children: [
+                                      Text(_comments[index].date, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                                      const SizedBox(width: 8),
+                                      Text(_comments[index].userName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF379777).withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _comments[index].text,
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        child: Material(
+                          borderRadius: BorderRadius.circular(16),
+                          elevation: 10,
+                          child: Container(
+                            width: 200,
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _comments[index] = MemberComment(
+                                        userName: _comments[index].userName,
+                                        text: _comments[index].text,
+                                        date: _comments[index].date,
+                                        upVotes: _comments[index].upVotes + 1,
+                                        downVotes: _comments[index].downVotes,
+                                      );
+                                    });
+                                    Navigator.pop(context);
+                                  },
+                                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                                      Icon(Icons.arrow_upward, color: Color(0xFF379777), size: 20),
+                                      Text('أوافق', style: TextStyle(fontSize: 15, color: Color(0xFF379777), fontWeight: FontWeight.w600)),
+                                    ]),
+                                  ),
+                                ),
+                                Divider(height: 1, color: Colors.grey.shade200),
+                                InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _comments[index] = MemberComment(
+                                        userName: _comments[index].userName,
+                                        text: _comments[index].text,
+                                        date: _comments[index].date,
+                                        upVotes: _comments[index].upVotes,
+                                        downVotes: _comments[index].downVotes + 1,
+                                      );
+                                    });
+                                    Navigator.pop(context);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                                      Icon(Icons.arrow_downward, color: Colors.red.shade400, size: 20),
+                                      Text('لا أوافق', style: TextStyle(fontSize: 15, color: Colors.red.shade400, fontWeight: FontWeight.w600)),
+                                    ]),
+                                  ),
+                                ),
+                                Divider(height: 1, color: Colors.grey.shade200),
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _showReportSheet();
+                                  },
+                                  borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                                      Icon(Icons.flag_outlined, color: Colors.orange.shade600, size: 20),
+                                      Text('ابلاغ', style: TextStyle(fontSize: 15, color: Colors.orange.shade600, fontWeight: FontWeight.w600)),
+                                    ]),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showReportSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => const _ReportBottomSheet(),
+    );
   }
 
   Widget _buildAddCommentField(bool isDark) {
@@ -983,10 +791,11 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
                 if (_commentController.text.trim().isNotEmpty) {
                   setState(() {
                     _comments.insert(0, MemberComment(
-                      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
                       userName: 'أنت',
                       text: _commentController.text.trim(),
                       date: 'الآن',
+                      upVotes: 0,
+                      downVotes: 0,
                     ));
                     _commentController.clear();
                   });
@@ -1003,7 +812,10 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
             Expanded(
               child: Container(
                 height: 44,
-                decoration: BoxDecoration(color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: TextField(
                   controller: _commentController,
                   textAlign: TextAlign.right,
@@ -1027,20 +839,94 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
   }
 }
 
-// ════════════════ Report Bottom Sheet (كما هي) ════════════════
+// ===================== Report Bottom Sheet =====================
 class _ReportBottomSheet extends StatefulWidget {
   const _ReportBottomSheet({super.key});
   @override
   State<_ReportBottomSheet> createState() => _ReportBottomSheetState();
 }
+
 class _ReportBottomSheetState extends State<_ReportBottomSheet> {
-  // ignore: unused_field
   final Set<String> _selectedOptions = {};
+
   @override
-  Widget build(BuildContext context) { /* ... */ return const SizedBox(); }
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Container(
+        padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Align(
+              alignment: Alignment.center,
+              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2))),
+            ),
+            const SizedBox(height: 20),
+            Text('ابلاغ', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color)),
+            const SizedBox(height: 12),
+            Text('لماذا تقوم بالابلاغ عن هذا المحتوى؟', textAlign: TextAlign.right, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodyLarge?.color)),
+            const SizedBox(height: 4),
+            Text('اذا كان شخص ما في خطر مباشر , فاطلب المساعدة قبل الإبلاغ الى دليل , لا تنتظر', textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: Colors.grey.shade500, height: 1.4)),
+            const SizedBox(height: 24),
+            _buildReportSection(title: 'التنمر أو المضايقة ؟', question: 'من يتعرض لها؟', options: ['أنا', 'صديق', 'لا أعرفه']),
+            const SizedBox(height: 24),
+            _buildReportSection(title: 'الاحتيال أو النصب أو المعلومات الكاذبة ؟', question: null, options: ['أحتيال أو النصب', 'مشاركة معلومات خاطئة', 'أنتحال صفة شركة أو شخص']),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity, height: 52,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade400, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                child: const Text('إرسال الابلاغ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportSection({required String title, String? question, required List<String> options}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Icon(Icons.expand_less, color: Colors.grey.shade500, size: 22),
+          Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodyLarge?.color)),
+        ]),
+        if (question != null) ...[
+          const SizedBox(height: 8),
+          Text(question, textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+        ],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8, runSpacing: 8, alignment: WrapAlignment.end,
+          children: options.map((option) {
+            final isSelected = _selectedOptions.contains(option);
+            return GestureDetector(
+              onTap: () => setState(() { isSelected ? _selectedOptions.remove(option) : _selectedOptions.add(option); }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF379777) : const Color(0xFF379777).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: isSelected ? const Color(0xFF379777) : const Color(0xFF379777).withOpacity(0.2), width: 1.5),
+                ),
+                child: Text(option, style: TextStyle(fontSize: 13, color: isSelected ? Colors.white : const Color(0xFF379777), fontWeight: FontWeight.w600)),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
 }
 
-// ════════════════ Models ════════════════
+// ===================== Models =====================
 class ServiceStep {
   final String title;
   final String location;
@@ -1048,17 +934,31 @@ class ServiceStep {
   final bool isCompleted;
   final List<String>? requiredDocs;
   final String? note;
-  ServiceStep({required this.title, required this.location, required this.description, this.isCompleted = false, this.requiredDocs, this.note});
+
+  ServiceStep({
+    required this.title,
+    required this.location,
+    required this.description,
+    this.isCompleted = false,
+    this.requiredDocs,
+    this.note,
+  });
 }
 
 class MemberComment {
-  final String id;
   final String userName;
   final String text;
   final String date;
-  int upVotes;
-  int downVotes;
-  MemberComment({required this.id, required this.userName, required this.text, required this.date, this.upVotes = 0, this.downVotes = 0});
+  final int upVotes;
+  final int downVotes;
+
+  MemberComment({
+    required this.userName,
+    required this.text,
+    required this.date,
+    this.upVotes = 0,
+    this.downVotes = 0,
+  });
 }
 
 class ServiceDetailsData {
@@ -1081,9 +981,9 @@ class ServiceDetailsData {
 
   static List<MemberComment> getMockComments() {
     return [
-      MemberComment(id: '101', userName: 'كارما علي.', text: 'الموظف طلب صورتين للبطاقة', date: '2 مارس'),
-      MemberComment(id: '102', userName: 'محمود يسري.', text: 'الصبح طابور طويل جدا , روح قبل مايقفلو ب 10 دقائق', date: '5 يناير'),
-      MemberComment(id: '103', userName: 'مريم أحمد', text: 'اول مكتب , أستاذ سامح بيخلص الورق بسرعة', date: '2 فبراير'),
+      MemberComment(userName: 'كارما علي.', text: 'الموظف طلب صورتين للبطاقة', date: '2 مارس', upVotes: 10, downVotes: 0),
+      MemberComment(userName: 'محمود يسري.', text: 'الصبح طابور طويل جدا , روح قبل مايقفلو ب 10 دقائق', date: '5 يناير', upVotes: 25, downVotes: 2),
+      MemberComment(userName: 'مريم أحمد', text: 'اول مكتب , أستاذ سامح بيخلص الورق بسرعة', date: '2 فبراير', upVotes: 11, downVotes: 0),
     ];
   }
 }

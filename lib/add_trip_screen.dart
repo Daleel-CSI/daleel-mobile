@@ -504,10 +504,10 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
   }
 
  Future<void> _createService() async {
-    if (_tripSteps.isEmpty) {  if (_tripSteps.isEmpty) {
+    if (_tripSteps.isEmpty) {
       _showSnackBar('يرجى إضافة خطوة واحدة على الأقل', isError: true);
       return;
-    } }
+    }
     // تجهيز البيانات
     final token = context.read<UserProvider>().user.token;
     if (token == null) return;
@@ -516,9 +516,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
       "title": _tripNameController.text,
       "description": _descriptionController.text,
       "category": _selectedCategory,
-      // "steps": ... ممكن نبعت الخطوات كمصفوفة لو الباك إند بيدعم
       "author": widget.userName,
-      // "source": "مستخدم",   // لو عايز تضيف
     };
 
     try {

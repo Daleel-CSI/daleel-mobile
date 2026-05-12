@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:daleel/api/api_service.dart';
 
 // ==================== Models ====================
+
 class ServiceItem {
   final String id;
   final String title;
@@ -30,19 +30,48 @@ class ServiceItem {
     this.isSaved = false,
   });
 
+  // ✅ إضافة fromJson
   factory ServiceItem.fromJson(Map<String, dynamic> json) {
     return ServiceItem(
-      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      id: json['_id']?.toString() ?? '',
       title: json['title'] ?? '',
       description: json['description'] ?? '',
-      category: json['category'] ?? '',
-      steps: json['steps']?.toString() ?? '(0 خطوات)',
+      category: json['category'] ?? 'أخرى',
+      steps: json['steps'] is String
+          ? json['steps']
+          : _parseSteps(json['steps']),
       author: json['author'] ?? '',
       source: json['source'] ?? '',
-      rating: (json['rating'] ?? 0).toDouble(),
-      reviewCount: (json['reviewCount'] ?? 0).toInt(),
-      views: (json['views'] ?? 0).toInt(),
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
+      reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
+      views: (json['views'] as num?)?.toInt() ?? 0,
+      isSaved: json['isSaved'] == true,
     );
+  }
+
+  static String _parseSteps(dynamic steps) {
+    if (steps is int) {
+      return '($steps ${steps == 1 ? 'خطوة' : 'خطوات'})';
+    } else if (steps is List) {
+      return '(${steps.length} ${steps.length == 1 ? 'خطوة' : 'خطوات'})';
+    }
+    return '(0 خطوات)';
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      '_id': id,
+      'title': title,
+      'description': description,
+      'category': category,
+      'steps': steps,
+      'author': author,
+      'source': source,
+      'rating': rating,
+      'reviewCount': reviewCount,
+      'views': views,
+      'isSaved': isSaved,
+    };
   }
 }
 
@@ -87,41 +116,65 @@ class TripStepData {
 }
 
 // ==================== Services Provider ====================
+
 class ServicesProvider with ChangeNotifier {
   final Map<String, List<ServiceItem>> _categories = {};
   bool _isLoading = false;
-  String? _errorMessage;
 
   Map<String, List<ServiceItem>> get categories => _categories;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
 
-  Future<void> fetchServices(String token) async {
+  Future<void> fetchAndSetServices({String? token}) async {
     _isLoading = true;
     notifyListeners();
-    try {
-      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/services');
-      final response = await http.get(url, headers: {'Authorization': 'Bearer $token'});
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body)['data'] ?? json.decode(response.body);
-        final services = data.map((item) => ServiceItem.fromJson(item)).toList();
-
-        _categories.clear();
-        for (var service in services) {
-          _categories.putIfAbsent(service.category, () => []);
-          _categories[service.category]!.add(service);
-        }
-        _errorMessage = null;
-      } else {
-        _errorMessage = 'فشل تحميل الخدمات';
-      }
-    } catch (e) {
-      _errorMessage = 'خطأ في الاتصال';
-    } finally {
+    final servicesJson = await ApiService.getServices(token: token);
+    if (servicesJson == null) {
       _isLoading = false;
       notifyListeners();
+      return;
     }
+
+    final Map<String, List<ServiceItem>> newCategories = {};
+
+    for (final json in servicesJson) {
+      final service = ServiceItem(
+        id: json['_id']?.toString() ?? '',
+        title: json['title'] ?? '',
+        description: json['description'] ?? '',
+        category: json['category'] ?? 'أخرى',
+        steps: _parseSteps(json['steps']),
+        author: json['author'] ?? '',
+        source: json['source'] ?? '',
+        rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
+        reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
+        views: (json['views'] as num?)?.toInt() ?? 0,
+        isSaved: false,
+      );
+
+      newCategories.putIfAbsent(service.category, () => []).add(service);
+    }
+
+    _categories.clear();
+    _categories.addAll(newCategories);
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  String _parseSteps(dynamic steps) {
+    if (steps is int) {
+      return '($steps ${steps == 1 ? 'خطوة' : 'خطوات'})';
+    } else if (steps is List) {
+      return '(${steps.length} ${steps.length == 1 ? 'خطوة' : 'خطوات'})';
+    } else if (steps is String) {
+      return steps;
+    }
+    return '(0 خطوات)';
+  }
+
+  List<ServiceItem> getServicesForCategory(String category) {
+    return _categories[category] ?? [];
   }
 
   void toggleSaveService(String serviceId) {
@@ -136,18 +189,31 @@ class ServicesProvider with ChangeNotifier {
     }
   }
 
-  List<ServiceItem> getServicesForCategory(String category) {
-    return _categories[category] ?? [];
+  List<ServiceItem> get allServices {
+    List<ServiceItem> all = [];
+    for (var category in _categories.values) {
+      all.addAll(category);
+    }
+    return all;
   }
 
+  // ✅ دالة إضافة خدمة محليًا (للاستخدام بعد الإنشاء)
   void addServiceLocally(ServiceItem service) {
-    _categories.putIfAbsent(service.category, () => []);
-    _categories[service.category]!.insert(0, service);
+    if (_categories.containsKey(service.category)) {
+      _categories[service.category]!.insert(0, service);
+    } else {
+      _categories[service.category] = [service];
+    }
     notifyListeners();
+  }
+
+  void addUserService(ServiceItem service) {
+    addServiceLocally(service);
   }
 }
 
 // ==================== Trips Provider ====================
+
 class TripsProvider with ChangeNotifier {
   final List<Trip> _trips = [];
 
@@ -166,9 +232,6 @@ class TripsProvider with ChangeNotifier {
   }
 
   void updateTripProgress(String tripId, int completedSteps) {
-    final tripIndex = _trips.indexWhere((trip) => trip.id == tripId);
-    if (tripIndex != -1) {
-      notifyListeners();
-    }
+    notifyListeners();
   }
 }
