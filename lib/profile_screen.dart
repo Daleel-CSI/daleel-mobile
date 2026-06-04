@@ -1,7 +1,9 @@
+// lib/screens/profile_screen.dart
 import 'dart:io';
 import 'dart:ui';
 import 'package:daleel/account_screen.dart';
 import 'package:daleel/help_about_bottom_sheets.dart';
+import 'package:daleel/providers/theme_provider.dart';
 import 'package:daleel/providers/user_provider.dart';
 import 'package:daleel/settings_screen.dart';
 import 'package:daleel/screen/auth/auth_screen.dart';
@@ -27,6 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<UserProvider>().user;
+    final userName = user.displayName ?? user.email ?? 'مستخدم';
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -35,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              _buildProfileHeader(user),
+              _buildProfileHeader(user, userName),
               const SizedBox(height: 30),
               _buildMenuSection(),
               const SizedBox(height: 100),
@@ -46,7 +49,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileHeader(User user) {
+  Widget _buildProfileHeader(User user, String userName) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -121,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            user.displayName ?? user.email ?? 'مستخدم',
+            userName,
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -132,11 +135,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (user.email != null)
             Text(
               user.email!,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-            )
-          else
-            Text(
-              'اليوم الأربعاء 5 مايو',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
         ],
@@ -149,7 +147,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // الحساب
           _buildMenuItem(
             title: 'الحساب',
             iconPath: 'assets/icons/user.svg',
@@ -161,7 +158,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           ),
           const SizedBox(height: 12),
-          // الإعدادات
           _buildMenuItem(
             title: 'الإعدادات',
             iconPath: 'assets/icons/setting-02.svg',
@@ -173,21 +169,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           ),
           const SizedBox(height: 12),
-          // المساعدة
+          _buildToggleMenuItem(
+            title: 'الوضع الليلي',
+            iconPath: 'assets/icons/moon-eclipse.svg',
+            value: context.watch<ThemeProvider>().isDarkMode,
+            onChanged: (value) => context.read<ThemeProvider>().toggleTheme(),
+          ),
+          const SizedBox(height: 12),
           _buildMenuItem(
             title: 'المساعدة',
             iconPath: 'assets/icons/help-circle.svg',
             onTap: () => showHelpBottomSheet(context),
           ),
           const SizedBox(height: 12),
-          // الوصف
           _buildMenuItem(
             title: 'الوصف',
             iconPath: 'assets/icons/information-circle.svg',
             onTap: () => showAboutBottomSheet(context),
           ),
           const SizedBox(height: 12),
-          // تسجيل خروج
           _buildMenuItem(
             title: 'تسجيل خروج',
             iconPath: 'assets/icons/logout-05.svg',
@@ -212,8 +212,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(Icons.arrow_back_ios,
-                size: 18,
+            Icon(Icons.arrow_back_ios, size: 18,
                 color: isLogout ? Colors.red.shade400 : Colors.grey.shade600),
             Expanded(
               child: Row(
@@ -233,6 +232,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       colorFilter: ColorFilter.mode(
                           isLogout ? Colors.red.shade600 : const Color(0xFF379777),
                           BlendMode.srcIn)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleMenuItem({
+    required String title,
+    required String iconPath,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return _AnimatedCard(
+      onTap: null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Switch(
+                value: value,
+                onChanged: onChanged,
+                activeColor: const Color(0xFF379777),
+                activeTrackColor: const Color(0xFFB2E4D0)),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).textTheme.bodyLarge?.color)),
+                  const SizedBox(width: 12),
+                  SvgPicture.asset(iconPath,
+                      width: 24,
+                      height: 24,
+                      colorFilter: const ColorFilter.mode(
+                          Color(0xFF379777), BlendMode.srcIn)),
                 ],
               ),
             ),
@@ -507,7 +548,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// ========== AnimatedCard + AnimatedDialogButton (كما هي) ==========
 class _AnimatedCard extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
@@ -526,10 +566,7 @@ class _AnimatedCardState extends State<_AnimatedCard> {
           ? (_) => setState(() => _isPressed = true)
           : null,
       onTapUp: widget.onTap != null
-          ? (_) {
-              setState(() => _isPressed = false);
-              widget.onTap!();
-            }
+          ? (_) { setState(() => _isPressed = false); widget.onTap!(); }
           : null,
       onTapCancel: widget.onTap != null
           ? () => setState(() => _isPressed = false)
@@ -617,20 +654,11 @@ class _AnimatedDialogButtonState extends State<_AnimatedDialogButton> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              widget.title,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: _isPressed ? Colors.white : getColor(),
-              ),
-            ),
+            Text(widget.title,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
+                    color: _isPressed ? Colors.white : getColor())),
             const SizedBox(width: 8),
-            Icon(
-              widget.icon,
-              size: 20,
-              color: _isPressed ? Colors.white : getColor(),
-            ),
+            Icon(widget.icon, size: 20, color: _isPressed ? Colors.white : getColor()),
           ],
         ),
       ),

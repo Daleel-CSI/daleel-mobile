@@ -65,12 +65,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Trigger service loading after first frame
-    Future.microtask(() {
+    // Trigger service loading after first frame with error handling
+    Future.microtask(() async {
       // ignore: use_build_context_synchronously
       final token = context.read<UserProvider>().user.token;
-      // ignore: use_build_context_synchronously
-      context.read<ServicesProvider>().fetchAndSetServices(token: token);
+      try {
+        // ignore: use_build_context_synchronously
+        await context.read<ServicesProvider>().fetchAndSetServices(token: token);
+      } catch (e) {
+        debugPrint('❌ Error loading services in HomePage: $e');
+      }
     });
   }
 
@@ -494,17 +498,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             crossAxisSpacing: 16,
             childAspectRatio: 0.85,
             children: [
-              _buildServiceCard('الجيش', 'assets/icons/army.svg', userName),
-              _buildServiceCard(
-                  'التخرج الجامعي', 'assets/icons/graduation.svg', userName),
-              _buildServiceCard(
-                  'السفر للخارج', 'assets/icons/Container-4.svg', userName),
-              _buildServiceCard(
-                  'الزواج', 'assets/icons/Component 1.svg', userName),
-              _buildServiceCard(
-                  'ترخيص السيارات', 'assets/icons/car_license.svg', userName),
-              _buildServiceCard(
-                  'المرور', 'assets/icons/Container-12.svg', userName),
+              _buildServiceCard('الجيش', 'assets/icons/army.svg', userName, categoryId: 'army'),
+              _buildServiceCard('التخرج الجامعي', 'assets/icons/graduation.svg', userName, categoryId: 'graduation'),
+              _buildServiceCard('السفر للخارج', 'assets/icons/Container-4.svg', userName, categoryId: 'travel'),
+              _buildServiceCard('الزواج', 'assets/icons/Component 1.svg', userName, categoryId: 'marriage'),
+              _buildServiceCard('ترخيص السيارات', 'assets/icons/car_license.svg', userName, categoryId: 'car_license'),
+              _buildServiceCard('المرور', 'assets/icons/Container-12.svg', userName, categoryId: 'traffic'),
             ],
           ),
         ],
@@ -516,6 +515,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     String title,
     String? svgPath,
     String userName, {
+    required String categoryId,
     bool isMore = false,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -526,6 +526,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           context,
           MaterialPageRoute(
             builder: (context) => CategoryServicesScreen(
+              categoryId: categoryId,
               categoryTitle: title,
               categoryIcon: svgPath ?? 'assets/icons/more.svg',
               userName: userName,

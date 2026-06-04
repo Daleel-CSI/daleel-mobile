@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 class ApiService {
   static const String baseUrl = 'https://auth-login-for-daleel1.vercel.app';
 
-  /// تحديث خدمة (مثلاً إرسال الخطوات المكتملة)
+  // ---------- خدمات ----------
   static Future<bool> updateService({
     required String serviceId,
     required Map<String, dynamic> data,
@@ -26,7 +26,6 @@ class ApiService {
     }
   }
 
-  /// حذف خدمة (مشوار) من الخادم
   static Future<bool> deleteService({
     required String serviceId,
     String? token,
@@ -46,7 +45,6 @@ class ApiService {
     }
   }
 
-  /// الموافقة على خدمة
   static Future<bool> approveService({
     required String serviceId,
     String? token,
@@ -66,7 +64,6 @@ class ApiService {
     }
   }
 
-  /// رفض خدمة
   static Future<bool> rejectService({
     required String serviceId,
     String? token,
@@ -86,7 +83,6 @@ class ApiService {
     }
   }
 
-  /// جلب كل الخدمات من السيرفر
   static Future<List<Map<String, dynamic>>?> getServices({
     String? token,
   }) async {
@@ -113,7 +109,6 @@ class ApiService {
     }
   }
 
-  /// جلب الخدمات المعلقة (قيد المراجعة)
   static Future<List<Map<String, dynamic>>?> getPendingServices({
     String? token,
   }) async {
@@ -140,7 +135,7 @@ class ApiService {
     }
   }
 
-  /// جلب التعليقات / التصويتات لخدمة معينة
+  // ---------- تصويتات ----------
   static Future<List<Map<String, dynamic>>?> getVotes({
     required String serviceId,
     String? token,
@@ -168,10 +163,9 @@ class ApiService {
     }
   }
 
-  /// إرسال تصويت (upvote/downvote) لخدمة
   static Future<bool> postVote({
     required String serviceId,
-    required String type, // "up" أو "down"
+    required String type,
     String? token,
   }) async {
     try {
@@ -187,6 +181,140 @@ class ApiService {
     } catch (e) {
       debugPrint('❌ Post vote error: $e');
       return false;
+    }
+  }
+
+  // ---------- إعدادات ----------
+  static Future<Map<String, dynamic>?> getSettings({
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/settings');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      final response = await http.get(uri, headers: headers);
+      debugPrint('🔹 GET /settings -> ${response.statusCode}');
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Get settings error: $e');
+      return null;
+    }
+  }
+
+  static Future<bool> updateThemeSetting({
+    required bool darkMode,
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/settings/theme');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      final body = json.encode({'theme': darkMode ? 'dark' : 'light'});
+      final response = await http.put(uri, headers: headers, body: body);
+      debugPrint('🔹 PUT /settings/theme -> ${response.statusCode}');
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      debugPrint('❌ Update theme error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> updateNotificationSetting({
+    required bool enabled,
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/settings/notifications');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      final body = json.encode({'enabled': enabled});
+      final response = await http.put(uri, headers: headers, body: body);
+      debugPrint('🔹 PUT /settings/notifications -> ${response.statusCode}');
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      debugPrint('❌ Update notifications error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> clearServerCache({
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/settings/clear-cache');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      final response = await http.post(uri, headers: headers);
+      debugPrint('🔹 POST /settings/clear-cache -> ${response.statusCode}');
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      debugPrint('❌ Clear server cache error: $e');
+      return false;
+    }
+  }
+
+  // ---------- فئات ----------
+  static Future<List<Map<String, dynamic>>?> getCategories({
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/categories');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      final response = await http.get(uri, headers: headers);
+      debugPrint('🔹 GET /categories -> ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) {
+          return data.cast<Map<String, dynamic>>();
+        } else if (data is Map && data['categories'] != null) {
+          return (data['categories'] as List).cast<Map<String, dynamic>>();
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Get categories error: $e');
+      return null;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>?> getServicesByCategory({
+    required String categoryId,
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/categories/$categoryId/services');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      final response = await http.get(uri, headers: headers);
+      debugPrint('🔹 GET /categories/$categoryId/services -> ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) {
+          return data.cast<Map<String, dynamic>>();
+        } else if (data is Map && data['services'] != null) {
+          return (data['services'] as List).cast<Map<String, dynamic>>();
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Get services by category error: $e');
+      return null;
     }
   }
 }

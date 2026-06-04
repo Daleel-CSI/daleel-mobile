@@ -30,7 +30,6 @@ class ServiceItem {
     this.isSaved = false,
   });
 
-  // ✅ إضافة fromJson
   factory ServiceItem.fromJson(Map<String, dynamic> json) {
     return ServiceItem(
       id: json['_id']?.toString() ?? '',
@@ -56,22 +55,6 @@ class ServiceItem {
       return '(${steps.length} ${steps.length == 1 ? 'خطوة' : 'خطوات'})';
     }
     return '(0 خطوات)';
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      '_id': id,
-      'title': title,
-      'description': description,
-      'category': category,
-      'steps': steps,
-      'author': author,
-      'source': source,
-      'rating': rating,
-      'reviewCount': reviewCount,
-      'views': views,
-      'isSaved': isSaved,
-    };
   }
 }
 
@@ -109,10 +92,23 @@ class TripStepData {
   final String title;
   final String description;
 
-  TripStepData({
-    required this.title,
-    required this.description,
-  });
+  TripStepData({required this.title, required this.description});
+}
+
+class Category {
+  final String id;
+  final String name;
+  final String iconPath;
+
+  Category({required this.id, required this.name, required this.iconPath});
+
+  factory Category.fromJson(Map<String, dynamic> json) {
+    return Category(
+      id: json['_id']?.toString() ?? '',
+      name: json['name'] ?? '',
+      iconPath: json['icon'] ?? '',
+    );
+  }
 }
 
 // ==================== Services Provider ====================
@@ -124,6 +120,11 @@ class ServicesProvider with ChangeNotifier {
   Map<String, List<ServiceItem>> get categories => _categories;
   bool get isLoading => _isLoading;
 
+  // قائمة الفئات الديناميكية
+  List<Category> _categoriesList = [];
+  List<Category> get categoriesList => _categoriesList;
+
+  /// تحميل الخدمات من السيرفر
   Future<void> fetchAndSetServices({String? token}) async {
     _isLoading = true;
     notifyListeners();
@@ -136,7 +137,6 @@ class ServicesProvider with ChangeNotifier {
     }
 
     final Map<String, List<ServiceItem>> newCategories = {};
-
     for (final json in servicesJson) {
       final service = ServiceItem(
         id: json['_id']?.toString() ?? '',
@@ -151,7 +151,6 @@ class ServicesProvider with ChangeNotifier {
         views: (json['views'] as num?)?.toInt() ?? 0,
         isSaved: false,
       );
-
       newCategories.putIfAbsent(service.category, () => []).add(service);
     }
 
@@ -171,6 +170,14 @@ class ServicesProvider with ChangeNotifier {
       return steps;
     }
     return '(0 خطوات)';
+  }
+
+  /// تحميل الفئات من الخادم
+  Future<void> fetchCategories({String? token}) async {
+    final catsJson = await ApiService.getCategories(token: token);
+    if (catsJson == null) return;
+    _categoriesList = catsJson.map((json) => Category.fromJson(json)).toList();
+    notifyListeners();
   }
 
   List<ServiceItem> getServicesForCategory(String category) {
@@ -197,7 +204,6 @@ class ServicesProvider with ChangeNotifier {
     return all;
   }
 
-  // ✅ دالة إضافة خدمة محليًا (للاستخدام بعد الإنشاء)
   void addServiceLocally(ServiceItem service) {
     if (_categories.containsKey(service.category)) {
       _categories[service.category]!.insert(0, service);
@@ -218,7 +224,6 @@ class TripsProvider with ChangeNotifier {
   final List<Trip> _trips = [];
 
   List<Trip> get trips => _trips;
-
   List<Trip> get savedTrips => _trips;
 
   void addTrip(Trip trip) {
