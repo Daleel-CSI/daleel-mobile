@@ -4,6 +4,14 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   static const String baseUrl = 'https://auth-login-for-daleel1.vercel.app';
+  static const Map<String, String> _legacyCategoryIds = {
+    'army': 'police_security',
+    'graduation': 'higher_education',
+    'travel': 'passports',
+    'marriage': 'civil_status',
+    'car_license': 'driving_licenses',
+    'traffic': 'driving_licenses',
+  };
 
   // ---------- خدمات ----------
   static Future<bool> updateService({
@@ -17,7 +25,11 @@ class ApiService {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       };
-      final response = await http.put(uri, headers: headers, body: json.encode(data));
+      final response = await http.put(
+        uri,
+        headers: headers,
+        body: json.encode(data),
+      );
       debugPrint('🔹 PUT /services/$serviceId -> ${response.statusCode}');
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
@@ -56,7 +68,9 @@ class ApiService {
         if (token != null) 'Authorization': 'Bearer $token',
       };
       final response = await http.put(uri, headers: headers);
-      debugPrint('🔹 PUT /services/$serviceId/approve -> ${response.statusCode}');
+      debugPrint(
+        '🔹 PUT /services/$serviceId/approve -> ${response.statusCode}',
+      );
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       debugPrint('❌ Approve service error: $e');
@@ -75,7 +89,9 @@ class ApiService {
         if (token != null) 'Authorization': 'Bearer $token',
       };
       final response = await http.put(uri, headers: headers);
-      debugPrint('🔹 PUT /services/$serviceId/reject -> ${response.statusCode}');
+      debugPrint(
+        '🔹 PUT /services/$serviceId/reject -> ${response.statusCode}',
+      );
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       debugPrint('❌ Reject service error: $e');
@@ -185,9 +201,7 @@ class ApiService {
   }
 
   // ---------- إعدادات ----------
-  static Future<Map<String, dynamic>?> getSettings({
-    String? token,
-  }) async {
+  static Future<Map<String, dynamic>?> getSettings({String? token}) async {
     try {
       final uri = Uri.parse('$baseUrl/settings');
       final headers = <String, String>{
@@ -246,9 +260,7 @@ class ApiService {
     }
   }
 
-  static Future<bool> clearServerCache({
-    String? token,
-  }) async {
+  static Future<bool> clearServerCache({String? token}) async {
     try {
       final uri = Uri.parse('$baseUrl/settings/clear-cache');
       final headers = <String, String>{
@@ -296,24 +308,73 @@ class ApiService {
     String? token,
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl/categories/$categoryId/services');
+      final services = await getServices(token: token);
+      if (services == null) return null;
+
+      final normalizedCategoryId = _normalizeCategoryId(categoryId);
+      final filteredServices = services.where((service) {
+        final categoryValues = [
+          service['category_id'],
+          service['categoryId'],
+          service['category'],
+          service['category_name'],
+          service['categoryName'],
+        ];
+
+        return categoryValues.any((value) {
+          if (value == null) return false;
+          return _normalizeCategoryId(value.toString()) == normalizedCategoryId;
+        });
+      }).toList();
+
+      debugPrint(
+        '🔹 GET /services filtered by $categoryId -> ${filteredServices.length}',
+      );
+      return filteredServices;
+    } catch (e) {
+      debugPrint('❌ Get services by category error: $e');
+      return null;
+    }
+  }
+
+  static String _normalizeCategoryId(String categoryId) {
+    final normalized = categoryId.trim().toLowerCase();
+    return _legacyCategoryIds[normalized] ?? normalized;
+  }
+
+  // ---------- Chat Bot ----------
+  static Future<Map<String, dynamic>?> sendChatMessage({
+    required String message,
+    String? sessionId,
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/chat/message');
       final headers = <String, String>{
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       };
-      final response = await http.get(uri, headers: headers);
-      debugPrint('🔹 GET /categories/$categoryId/services -> ${response.statusCode}');
-      if (response.statusCode == 200) {
+      final body = json.encode({
+        'message': message,
+        if (sessionId != null) 'sessionId': sessionId,
+      });
+
+      final response = await http.post(uri, headers: headers, body: body);
+      debugPrint('🔹 POST /chat/message -> ${response.statusCode}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        if (data is List) {
-          return data.cast<Map<String, dynamic>>();
-        } else if (data is Map && data['services'] != null) {
-          return (data['services'] as List).cast<Map<String, dynamic>>();
-        }
+        if (data is Map<String, dynamic>) return data;
+        if (data is Map) return Map<String, dynamic>.from(data);
+        return {'message': data.toString()};
+      } else {
+        debugPrint(
+          '❌ Chat API returned: ${response.statusCode} - ${response.body}',
+        );
+        return null;
       }
-      return null;
     } catch (e) {
-      debugPrint('❌ Get services by category error: $e');
+      debugPrint('❌ Send chat message error: $e');
       return null;
     }
   }

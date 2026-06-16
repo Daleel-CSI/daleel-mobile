@@ -31,16 +31,23 @@ class ServiceItem {
   });
 
   factory ServiceItem.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    final requiredDocuments = data is Map ? data['required_documents'] : null;
+
     return ServiceItem(
-      id: json['_id']?.toString() ?? '',
-      title: json['title'] ?? '',
+      id: (json['_id'] ?? json['id'] ?? json['service_id'])?.toString() ?? '',
+      title: json['title'] ?? json['name'] ?? '',
       description: json['description'] ?? '',
-      category: json['category'] ?? 'أخرى',
+      category:
+          json['category'] ??
+          json['category_name'] ??
+          json['category_id'] ??
+          'أخرى',
       steps: json['steps'] is String
           ? json['steps']
-          : _parseSteps(json['steps']),
-      author: json['author'] ?? '',
-      source: json['source'] ?? '',
+          : _parseSteps(json['steps'] ?? requiredDocuments),
+      author: json['author'] ?? 'دليل',
+      source: json['source'] ?? json['category_name'] ?? '',
       rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       views: (json['views'] as num?)?.toInt() ?? 0,
@@ -103,9 +110,12 @@ class Category {
   Category({required this.id, required this.name, required this.iconPath});
 
   factory Category.fromJson(Map<String, dynamic> json) {
+    final id =
+        (json['_id'] ?? json['category_id'] ?? json['id'])?.toString() ?? '';
+
     return Category(
-      id: json['_id']?.toString() ?? '',
-      name: json['name'] ?? '',
+      id: id,
+      name: json['name'] ?? json['category_name'] ?? id,
       iconPath: json['icon'] ?? '',
     );
   }
@@ -138,19 +148,7 @@ class ServicesProvider with ChangeNotifier {
 
     final Map<String, List<ServiceItem>> newCategories = {};
     for (final json in servicesJson) {
-      final service = ServiceItem(
-        id: json['_id']?.toString() ?? '',
-        title: json['title'] ?? '',
-        description: json['description'] ?? '',
-        category: json['category'] ?? 'أخرى',
-        steps: _parseSteps(json['steps']),
-        author: json['author'] ?? '',
-        source: json['source'] ?? '',
-        rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
-        reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
-        views: (json['views'] as num?)?.toInt() ?? 0,
-        isSaved: false,
-      );
+      final service = ServiceItem.fromJson(json);
       newCategories.putIfAbsent(service.category, () => []).add(service);
     }
 
@@ -159,17 +157,6 @@ class ServicesProvider with ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
-  }
-
-  String _parseSteps(dynamic steps) {
-    if (steps is int) {
-      return '($steps ${steps == 1 ? 'خطوة' : 'خطوات'})';
-    } else if (steps is List) {
-      return '(${steps.length} ${steps.length == 1 ? 'خطوة' : 'خطوات'})';
-    } else if (steps is String) {
-      return steps;
-    }
-    return '(0 خطوات)';
   }
 
   /// تحميل الفئات من الخادم

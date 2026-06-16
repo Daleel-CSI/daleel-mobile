@@ -1,7 +1,10 @@
 // ignore_for_file: unused_local_variable
 
+import 'package:daleel/api/api_service.dart';
+import 'package:daleel/providers/user_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
 
 class AIChatScreen extends StatefulWidget {
   const AIChatScreen({super.key});
@@ -10,11 +13,13 @@ class AIChatScreen extends StatefulWidget {
   State<AIChatScreen> createState() => _AIChatScreenState();
 }
 
-class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMixin {
+class _AIChatScreenState extends State<AIChatScreen>
+    with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
+  String? _sessionId;
   late AnimationController _typingAnimationController;
 
   @override
@@ -24,7 +29,7 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat();
-    
+
     // رسالة ترحيبية
     Future.delayed(const Duration(milliseconds: 500), () {
       _addBotMessage(
@@ -47,22 +52,18 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
 
   void _addBotMessage(String text) {
     setState(() {
-      _messages.add(ChatMessage(
-        text: text,
-        isUser: false,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(
+        ChatMessage(text: text, isUser: false, timestamp: DateTime.now()),
+      );
     });
     _scrollToBottom();
   }
 
   void _addUserMessage(String text) {
     setState(() {
-      _messages.add(ChatMessage(
-        text: text,
-        isUser: true,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(
+        ChatMessage(text: text, isUser: true, timestamp: DateTime.now()),
+      );
     });
     _scrollToBottom();
   }
@@ -80,29 +81,71 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
   }
 
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
+    if (_messageController.text.trim().isEmpty || _isTyping) return;
 
     final message = _messageController.text.trim();
+    final token = context.read<UserProvider>().user.token;
+
     _addUserMessage(message);
     _messageController.clear();
 
-    // إظهار typing indicator
     setState(() => _isTyping = true);
 
-    // محاكاة الرد (هنا هتضيف API Call)
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() => _isTyping = false);
-
-    // رد تجريبي
-    _addBotMessage(
-      "شكراً على رسالتك! 🙏\n\n"
-      "حالياً جاري تطوير الذكاء الاصطناعي للرد على استفساراتك.\n\n"
-      "في الوقت الحالي، يمكنك:\n"
-      "• تصفح الخدمات المتاحة\n"
-      "• البحث عن إجراءات محددة\n"
-      "• التواصل مع الدعم الفني",
+    final response = await ApiService.sendChatMessage(
+      message: message,
+      sessionId: _sessionId,
+      token: token,
     );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isTyping = false;
+      _sessionId = response?['sessionId']?.toString() ?? _sessionId;
+    });
+
+    final botReply = _extractBotReply(response);
+    _addBotMessage(
+      botReply ??
+          "عذراً، لم أتمكن من الاتصال بالمساعد الذكي الآن. حاول مرة أخرى بعد قليل.",
+    );
+  }
+
+  String? _extractBotReply(Map<String, dynamic>? response) {
+    if (response == null) return null;
+
+    for (final key in ['reply', 'response', 'answer', 'text', 'message']) {
+      final value = response[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+
+    final data = response['data'];
+    if (data is Map<String, dynamic>) {
+      final reply = _extractBotReply(data);
+      if (reply != null) return reply;
+    }
+
+    final messages = response['messages'];
+    if (messages is List && messages.isNotEmpty) {
+      for (final message in messages.reversed) {
+        if (message is Map<String, dynamic>) {
+          final isUserMessage =
+              message['isUser'] == true || message['role'] == 'user';
+          if (!isUserMessage) {
+            for (final key in ['content', 'text', 'message', 'reply']) {
+              final value = message[key];
+              if (value is String && value.trim().isNotEmpty) {
+                return value.trim();
+              }
+            }
+          }
+        } else if (message is String && message.trim().isNotEmpty) {
+          return message.trim();
+        }
+      }
+    }
+
+    return null;
   }
 
   @override
@@ -120,7 +163,10 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                 ? _buildEmptyState(isDark)
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 20,
+                    ),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       return _buildMessageBubble(_messages[index], isDark);
@@ -143,10 +189,7 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(
-          Icons.arrow_back_ios,
-          color: Color(0xFF379777),
-        ),
+        icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF379777)),
         onPressed: () => Navigator.pop(context),
       ),
       title: Row(
@@ -252,10 +295,7 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
           const SizedBox(height: 8),
           Text(
             'اسأل مساعدك الذكي عن أي شيء!',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
           ),
         ],
       ),
@@ -266,8 +306,9 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
-        mainAxisAlignment:
-            message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: message.isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!message.isUser) ...[
@@ -310,8 +351,8 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                     color: message.isUser
                         ? null
                         : (isDark
-                            ? const Color(0xFF2A2A2A)
-                            : Colors.grey.shade100),
+                              ? const Color(0xFF2A2A2A)
+                              : Colors.grey.shade100),
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(16),
                       topRight: const Radius.circular(16),
@@ -320,10 +361,11 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: (message.isUser
-                                ? const Color(0xFF379777)
-                                : Colors.black)
-                            .withOpacity(0.1),
+                        color:
+                            (message.isUser
+                                    ? const Color(0xFF379777)
+                                    : Colors.black)
+                                .withOpacity(0.1),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -331,7 +373,9 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                   ),
                   child: Text(
                     message.text,
-                    textAlign: message.isUser ? TextAlign.right : TextAlign.right,
+                    textAlign: message.isUser
+                        ? TextAlign.right
+                        : TextAlign.right,
                     style: TextStyle(
                       fontSize: 15,
                       height: 1.5,
@@ -344,10 +388,7 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                 const SizedBox(height: 4),
                 Text(
                   _formatTime(message.timestamp),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
               ],
             ),
@@ -407,7 +448,8 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                   animation: _typingAnimationController,
                   builder: (context, child) {
                     final delay = index * 0.2;
-                    final value = (_typingAnimationController.value - delay) % 1;
+                    final value =
+                        (_typingAnimationController.value - delay) % 1;
                     final scale = value < 0.5
                         ? 1.0 + (value * 2) * 0.5
                         : 1.5 - ((value - 0.5) * 2) * 0.5;
@@ -459,9 +501,7 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF2A2A2A)
-                    : Colors.grey.shade100,
+                color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: IconButton(
@@ -542,7 +582,7 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                     BlendMode.srcIn,
                   ),
                 ),
-                onPressed: _sendMessage,
+                onPressed: _isTyping ? null : _sendMessage,
               ),
             ),
           ],
@@ -583,7 +623,10 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
               ),
               const SizedBox(height: 20),
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: Color(0xFF379777)),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Color(0xFF379777),
+                ),
                 title: const Text('مسح المحادثة'),
                 onTap: () {
                   Navigator.pop(context);
@@ -591,7 +634,10 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.info_outline, color: Color(0xFF379777)),
+                leading: const Icon(
+                  Icons.info_outline,
+                  color: Color(0xFF379777),
+                ),
                 title: const Text('حول المساعد الذكي'),
                 onTap: () {
                   Navigator.pop(context);
@@ -610,18 +656,14 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
     setState(() {
       _messages.clear();
     });
-    _addBotMessage(
-      "تم مسح المحادثة! 🗑️\n\nكيف يمكنني مساعدتك؟",
-    );
+    _addBotMessage("تم مسح المحادثة! 🗑️\n\nكيف يمكنني مساعدتك؟");
   }
 
   void _showAboutDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Container(
@@ -633,7 +675,11 @@ class _AIChatScreenState extends State<AIChatScreen> with TickerProviderStateMix
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
             ),
             const SizedBox(width: 12),
             const Text('مساعد دليل الذكي'),
