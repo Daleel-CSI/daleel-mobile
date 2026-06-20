@@ -3,6 +3,24 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:daleel/providers/app_provider.dart';
 
+/// ✅ شكل الرد الفعلي من GET /votes/{id} هو {upvotes, downvotes}
+/// (مش List زي ما كانت getVotes القديمة بتفترض)
+class VoteCounts {
+  final int upVotes;
+  final int downVotes;
+
+  VoteCounts({this.upVotes = 0, this.downVotes = 0});
+
+  factory VoteCounts.fromJson(Map<String, dynamic> json) {
+    final up = json['upvotes'] ?? json['upVotes'];
+    final down = json['downvotes'] ?? json['downVotes'];
+    return VoteCounts(
+      upVotes: (up as num?)?.toInt() ?? 0,
+      downVotes: (down as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class ApiService {
   static const String baseUrl = 'https://auth-login-for-daleel1.vercel.app';
 
@@ -244,6 +262,31 @@ class ApiService {
       return null;
     } catch (e) {
       debugPrint('❌ Get votes error: $e');
+      return null;
+    }
+  }
+
+  /// ✅ يقرأ شكل الرد الفعلي {upvotes, downvotes} من GET /votes/{id}
+  /// بدل getVotes القديمة اللي كانت بتفترض إن الرد List من التعليقات
+  static Future<VoteCounts?> getVoteCounts({
+    required String serviceId,
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/votes/$serviceId');
+      final headers = _buildHeaders(token);
+      final response = await http.get(uri, headers: headers);
+      debugPrint('🔹 GET /votes/$serviceId (counts) -> ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          final inner = data['data'] is Map<String, dynamic> ? data['data'] as Map<String, dynamic> : data;
+          return VoteCounts.fromJson(inner);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Get vote counts error: $e');
       return null;
     }
   }

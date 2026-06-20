@@ -311,9 +311,13 @@ class _PopularServicesScreenState extends State<PopularServicesScreen> {
             builder: (context) => ServiceDetailsScreen(
               serviceTitle: service.title,
               serviceDescription: service.description,
-              steps: ServiceDetailsData.getStepsForService(service.title),
-              comments: ServiceDetailsData.getMockComments(),
+              steps: ServiceDetailsData.buildSteps(
+                description: service.description,
+                requiredDocuments: service.requiredDocuments,
+              ),
+              comments: const [],
               serviceId: service.id,
+              price: service.price,
             ),
           ),
         );

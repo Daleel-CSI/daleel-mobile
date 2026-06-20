@@ -12,6 +12,7 @@ class ServiceDetailsScreen extends StatefulWidget {
   final List<MemberComment> comments;
   final String serviceId;
   final bool isAdmin;
+  final double? price;
 
   const ServiceDetailsScreen({
     super.key,
@@ -21,6 +22,7 @@ class ServiceDetailsScreen extends StatefulWidget {
     required this.comments,
     required this.serviceId,
     this.isAdmin = false,
+    this.price,
   });
 
   @override
@@ -34,8 +36,10 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
   bool _isRejecting = false;
 
   List<MemberComment> _comments = [];
-  bool _isLoadingComments = false;
-  String? _commentsError;
+
+  VoteCounts? _voteCounts;
+  bool _isLoadingVotes = false;
+  String? _votesError;
 
   bool _isVoting = false;
 
@@ -44,39 +48,35 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     super.initState();
     _expandedSteps.addAll(List.generate(widget.steps.length, (_) => false));
     _completedSteps.addAll(widget.steps.map((step) => step.isCompleted).toList());
+    // ✅ التعليقات محلية فقط (السيرفر مش بيرجع تعليقات حقيقية حالياً)،
+    // أما عدد الإعجاب/الرفض فبييجي من /votes/{id} الحقيقي
     _comments = List.from(widget.comments);
-    _fetchComments();
+    _fetchVoteCounts();
   }
 
-  Future<void> _fetchComments() async {
+  Future<void> _fetchVoteCounts() async {
     final token = context.read<UserProvider>().user.token;
     setState(() {
-      _isLoadingComments = true;
-      _commentsError = null;
+      _isLoadingVotes = true;
+      _votesError = null;
     });
 
-    final votesJson = await ApiService.getVotes(
+    final counts = await ApiService.getVoteCounts(
       serviceId: widget.serviceId,
       token: token,
     );
 
     if (!mounted) return;
 
-    if (votesJson != null) {
+    if (counts != null) {
       setState(() {
-        _comments = votesJson.map((json) => MemberComment(
-          userName: json['userName'] ?? json['username'] ?? 'مستخدم',
-          text: json['text'] ?? json['comment'] ?? '',
-          date: json['date'] ?? '',
-          upVotes: (json['upVotes'] as num?)?.toInt() ?? 0,
-          downVotes: (json['downVotes'] as num?)?.toInt() ?? 0,
-        )).toList();
-        _isLoadingComments = false;
+        _voteCounts = counts;
+        _isLoadingVotes = false;
       });
     } else {
       setState(() {
-        _commentsError = 'فشل تحميل التعليقات';
-        _isLoadingComments = false;
+        _votesError = 'فشل تحميل عدد الأصوات';
+        _isLoadingVotes = false;
       });
     }
   }
@@ -151,7 +151,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     if (!mounted) return;
 
     if (ok) {
-      await _fetchComments();
+      await _fetchVoteCounts();
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -236,39 +236,21 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF3E0),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'عطلة رسمية',
-                            style: TextStyle(fontSize: 13, color: Color(0xFFE65100), fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        Flexible(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildVoteButtons(),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  'اليوم الجمعة 1 مايو',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        if (widget.price != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF379777).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${widget.price!.toStringAsFixed(widget.price! % 1 == 0 ? 0 : 2)} جنيه',
+                              style: const TextStyle(fontSize: 13, color: Color(0xFF379777), fontWeight: FontWeight.w600),
+                            ),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        _buildVoteButtons(),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -284,9 +266,12 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                       style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
                     ),
                     const SizedBox(height: 24),
-                    ...widget.steps.asMap().entries.map((entry) {
-                      return _buildStepItem(entry.value, entry.key, isDark);
-                    }),
+                    if (widget.steps.isEmpty)
+                      _buildNoStepsAvailable()
+                    else
+                      ...widget.steps.asMap().entries.map((entry) {
+                        return _buildStepItem(entry.value, entry.key, isDark);
+                      }),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -295,6 +280,34 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
             _buildMembersButton(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildNoStepsAvailable() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.grey.shade800
+              : Colors.grey.shade200,
+          width: 0.8,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 32),
+          const SizedBox(height: 10),
+          Text(
+            'لا توجد تفاصيل خطوات متاحة لهذه الخدمة بعد',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+          ),
+        ],
       ),
     );
   }
@@ -420,11 +433,12 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                             ),
                           ),
                           const SizedBox(height: 3),
-                          Text(
-                            step.location,
-                            textAlign: TextAlign.right,
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                          ),
+                          if (step.location.isNotEmpty)
+                            Text(
+                              step.location,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                            ),
                         ],
                       ),
                     ),
@@ -508,13 +522,13 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('تم التحديث 27 مارس', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              const SizedBox.shrink(),
               InkWell(
                 onTap: () {
-                  if (!_isLoadingComments && _commentsError == null) {
+                  if (!_isLoadingVotes && _votesError == null) {
                     _showMembersBottomSheet();
-                  } else if (_commentsError != null) {
-                    _fetchComments();
+                  } else if (_votesError != null) {
+                    _fetchVoteCounts();
                   }
                 },
                 borderRadius: BorderRadius.circular(24),
@@ -525,13 +539,27 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(color: const Color(0xFF379777).withOpacity(0.3), width: 1.5),
                   ),
-                  child: _isLoadingComments
+                  child: _isLoadingVotes
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
-                      : _commentsError != null
+                      : _votesError != null
                           ? Text('فشل التحميل - اضغط لإعادة', style: TextStyle(color: Colors.red.shade600, fontSize: 11))
-                          : Text(
-                              'مشاركات الأعضاء (${_comments.length})',
-                              style: const TextStyle(fontSize: 14, color: Color(0xFF379777), fontWeight: FontWeight.w600),
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${_voteCounts?.downVotes ?? 0}',
+                                  style: TextStyle(fontSize: 13, color: Colors.red.shade400, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(Icons.arrow_downward, color: Colors.red.shade400, size: 14),
+                                const SizedBox(width: 10),
+                                const Icon(Icons.arrow_upward, color: Color(0xFF379777), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${_voteCounts?.upVotes ?? 0}',
+                                  style: const TextStyle(fontSize: 13, color: Color(0xFF379777), fontWeight: FontWeight.bold),
+                                ),
+                              ],
                             ),
                 ),
               ),
@@ -551,6 +579,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
       builder: (context) => _MembersBottomSheet(
         comments: _comments,
         onAddComment: _addComment,
+        voteCounts: _voteCounts,
       ),
     );
   }
@@ -560,8 +589,9 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
 class _MembersBottomSheet extends StatefulWidget {
   final List<MemberComment> comments;
   final Future<void> Function(String) onAddComment;
+  final VoteCounts? voteCounts;
 
-  const _MembersBottomSheet({required this.comments, required this.onAddComment});
+  const _MembersBottomSheet({required this.comments, required this.onAddComment, this.voteCounts});
 
   @override
   State<_MembersBottomSheet> createState() => _MembersBottomSheetState();
@@ -628,6 +658,24 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
               ],
             ),
           ),
+          if (widget.voteCounts != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text('${widget.voteCounts!.downVotes}', style: TextStyle(fontSize: 13, color: Colors.red.shade400, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 4),
+                  Icon(Icons.arrow_downward, color: Colors.red.shade400, size: 14),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.arrow_upward, color: Color(0xFF379777), size: 14),
+                  const SizedBox(width: 4),
+                  Text('${widget.voteCounts!.upVotes}', style: const TextStyle(fontSize: 13, color: Color(0xFF379777), fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Expanded(
             child: ListView.builder(
@@ -1035,28 +1083,35 @@ class MemberComment {
 }
 
 class ServiceDetailsData {
-  static List<ServiceStep> getStepsForService(String serviceTitle) {
-    switch (serviceTitle) {
-      case 'استخراج شهادة الموقف من التجنيد':
-        return [
-          ServiceStep(title: 'استخراج بطاقة الهوية', location: 'السجل المدني', description: 'تأكد إنك عندك بطاقة هوية سارية قبل ما تبدأ', isCompleted: true),
-          ServiceStep(title: 'الذهاب لمركز التجنيد', location: 'أقرب مركز تجنيد', description: 'اذهب لأقرب مركز تجنيد واخذ معك البطاقة والطلب', isCompleted: true, requiredDocs: ['البطاقة الوطنية', 'طلب استخراج شهادة الموقف']),
-          ServiceStep(title: 'تقديم الطلب', location: 'مكتب الخدمات في مركز التجنيد', description: 'قدّم الطلب وادفع الرسوم المحددة', isCompleted: false),
-          ServiceStep(title: 'استلام الشهادة', location: 'مركز التجنيد', description: 'استلم الشهادة بعد المدة المحددة من الإصدار', isCompleted: false),
-        ];
-      default:
-        return [
-          ServiceStep(title: 'الخطوة الأولى', location: 'الجهة المختصة', description: 'وصف تفصيلي للخطوة الأولى', isCompleted: true, requiredDocs: ['المستند 1', 'المستند 2']),
-          ServiceStep(title: 'الخطوة الثانية', location: 'السجل المدني', description: 'وصف تفصيلي للخطوة الثانية', isCompleted: false, note: 'ملاحظة مهمة'),
-        ];
-    }
-  }
+  /// ✅ بناء خطوات حقيقية من بيانات الخدمة الفعلية القادمة من السيرفر
+  /// (الوصف + المستندات المطلوبة)، بدل بيانات وهمية ثابتة.
+  /// لو مفيش بيانات حقيقية كفاية، بترجع قائمة فاضية ويتم عرض رسالة
+  /// "لا توجد تفاصيل متاحة" بدل اختلاق خطوات غير موجودة فعلياً.
+  static List<ServiceStep> buildSteps({
+    required String description,
+    List<String> requiredDocuments = const [],
+  }) {
+    final steps = <ServiceStep>[];
 
-  static List<MemberComment> getMockComments() {
-    return [
-      MemberComment(userName: 'كارما علي.', text: 'الموظف طلب صورتين للبطاقة', date: '2 مارس', upVotes: 10, downVotes: 0),
-      MemberComment(userName: 'محمود يسري.', text: 'الصبح طابور طويل جدا , روح قبل مايقفلو ب 10 دقائق', date: '5 يناير', upVotes: 25, downVotes: 2),
-      MemberComment(userName: 'مريم أحمد', text: 'اول مكتب , أستاذ سامح بيخلص الورق بسرعة', date: '2 فبراير', upVotes: 11, downVotes: 0),
-    ];
+    if (description.trim().isNotEmpty) {
+      steps.add(ServiceStep(
+        title: 'تفاصيل الخدمة',
+        location: '',
+        description: description,
+        isCompleted: false,
+      ));
+    }
+
+    if (requiredDocuments.isNotEmpty) {
+      steps.add(ServiceStep(
+        title: 'المستندات المطلوبة',
+        location: '',
+        description: 'تأكد من توفر المستندات التالية قبل التقديم',
+        isCompleted: false,
+        requiredDocs: requiredDocuments,
+      ));
+    }
+
+    return steps;
   }
 }

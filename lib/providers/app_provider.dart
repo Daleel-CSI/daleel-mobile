@@ -15,6 +15,8 @@ class ServiceItem {
   final double rating;
   final int reviewCount;
   final int views;
+  final double? price;
+  final List<String> requiredDocuments;
   bool isSaved;
 
   ServiceItem({
@@ -28,12 +30,15 @@ class ServiceItem {
     required this.rating,
     required this.reviewCount,
     required this.views,
+    this.price,
+    this.requiredDocuments = const [],
     this.isSaved = false,
   });
 
   factory ServiceItem.fromJson(Map<String, dynamic> json) {
     final data = json['data'];
-    final requiredDocuments = data is Map ? data['required_documents'] : null;
+    final requiredDocumentsRaw = data is Map ? data['required_documents'] : null;
+    final docsSource = json['steps'] ?? requiredDocumentsRaw;
 
     return ServiceItem(
       id: (json['_id'] ?? json['id'] ?? json['service_id'])?.toString() ?? '',
@@ -46,12 +51,18 @@ class ServiceItem {
           'أخرى',
       steps: json['steps'] is String
           ? json['steps']
-          : _parseSteps(json['steps'] ?? requiredDocuments),
+          : _parseSteps(docsSource),
       author: json['author'] ?? 'دليل',
       source: json['source'] ?? json['category_name'] ?? '',
       rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       views: (json['views'] as num?)?.toInt() ?? 0,
+      price: (json['price'] as num?)?.toDouble(),
+      // ✅ المستندات المطلوبة الحقيقية القادمة من السيرفر (إن وُجدت)
+      // تُستخدم لاحقاً في شاشة تفاصيل الخدمة بدل البيانات الوهمية
+      requiredDocuments: docsSource is List
+          ? docsSource.map((e) => e.toString()).toList()
+          : const [],
       isSaved: json['isSaved'] == true,
     );
   }

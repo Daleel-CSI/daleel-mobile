@@ -111,10 +111,17 @@ class _SaveScreenState extends State<SaveScreen> {
   Widget _buildTripCard(Trip trip, int index) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // جلب الخطوات الفعلية للخدمة
-    final actualSteps = ServiceDetailsData.getStepsForService(trip.title);
-    final totalSteps = actualSteps.length;
-    final completedSteps = actualSteps.where((step) => step.isCompleted).length;
+    // ✅ استخدام بيانات الرحلة الحقيقية (trip.steps) بدل البيانات الوهمية
+    final actualSteps = trip.steps.isNotEmpty
+        ? List.generate(trip.steps.length, (i) => ServiceStep(
+              title: trip.steps[i].title,
+              location: '',
+              description: trip.steps[i].description,
+              isCompleted: i < trip.completedSteps,
+            ))
+        : <ServiceStep>[];
+    final totalSteps = trip.totalSteps > 0 ? trip.totalSteps : actualSteps.length;
+    final completedSteps = trip.completedSteps;
 
     return _AnimatedCard(
       onTap: () {
@@ -124,9 +131,9 @@ class _SaveScreenState extends State<SaveScreen> {
           MaterialPageRoute(
             builder: (context) => ServiceDetailsScreen(
               serviceTitle: trip.title,
-              serviceDescription: trip.category,
+              serviceDescription: trip.description ?? trip.category,
               steps: actualSteps,
-              comments: ServiceDetailsData.getMockComments(),
+              comments: const [],
               serviceId: trip.id,   // المعرف الفريد للمشوار
             ),
           ),
