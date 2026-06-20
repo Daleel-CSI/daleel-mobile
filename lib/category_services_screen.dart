@@ -43,7 +43,7 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen> {
       _error = null;
     });
 
-    final servicesJson = await ApiService.getServicesByCategory(
+    final servicesJson = await ApiService.getServicesByCategoryId(
       categoryId: widget.categoryId,
       token: token,
     );
@@ -190,13 +190,23 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            // الصف الأول (عدد الخطوات + حفظ + تقييم)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(service.steps,
+                Expanded(
+                  child: Text(
+                    service.steps,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade600)),
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Consumer<ServicesProvider>(
                       builder: (context, provider, child) {
@@ -260,6 +270,8 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen> {
               ],
             ),
             const SizedBox(height: 8),
+
+            // العنوان
             Text(
               service.title,
               textAlign: TextAlign.right,
@@ -271,6 +283,8 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen> {
               ),
             ),
             const SizedBox(height: 8),
+
+            // الوصف
             Text(
               service.description,
               textAlign: TextAlign.right,
@@ -281,6 +295,8 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen> {
               ),
             ),
             const SizedBox(height: 12),
+
+            // ========== الصف السفلي (الذي يسبب التجاوز) ==========
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -290,27 +306,30 @@ class _CategoryServicesScreenState extends State<CategoryServicesScreen> {
                       fontSize: 11, color: Colors.grey.shade600),
                 ),
                 const SizedBox(width: 8),
-                const Icon(Icons.circle,
-                    color: Color(0xFF379777), size: 6),
+                const Icon(Icons.circle, color: Color(0xFF379777), size: 6),
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF2A2A2A)
-                        : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    service.source,
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade700),
+                // المصدر – الآن مغلف بـ Flexible لمنع التجاوز
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF2A2A2A)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      service.source,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade700),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(Icons.circle,
-                    color: Color(0xFF379777), size: 6),
+                const Icon(Icons.circle, color: Color(0xFF379777), size: 6),
                 const SizedBox(width: 8),
                 Text(
                   'بواسطة ${service.author}',

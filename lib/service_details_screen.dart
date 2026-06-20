@@ -11,6 +11,7 @@ class ServiceDetailsScreen extends StatefulWidget {
   final List<ServiceStep> steps;
   final List<MemberComment> comments;
   final String serviceId;
+  final bool isAdmin;
 
   const ServiceDetailsScreen({
     super.key,
@@ -19,6 +20,7 @@ class ServiceDetailsScreen extends StatefulWidget {
     required this.steps,
     required this.comments,
     required this.serviceId,
+    this.isAdmin = false,
   });
 
   @override
@@ -31,12 +33,10 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
   bool _isApproving = false;
   bool _isRejecting = false;
 
-  // ----- التعليقات المحملة من الخادم -----
   List<MemberComment> _comments = [];
   bool _isLoadingComments = false;
   String? _commentsError;
-  
-  // ----- التصويت -----
+
   bool _isVoting = false;
 
   @override
@@ -44,6 +44,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     super.initState();
     _expandedSteps.addAll(List.generate(widget.steps.length, (_) => false));
     _completedSteps.addAll(widget.steps.map((step) => step.isCompleted).toList());
+    _comments = List.from(widget.comments);
     _fetchComments();
   }
 
@@ -81,6 +82,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
   }
 
   Future<void> _toggleStep(int index) async {
+    final oldValue = _completedSteps[index];
     setState(() {
       _completedSteps[index] = !_completedSteps[index];
     });
@@ -94,11 +96,83 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     }
 
     final token = context.read<UserProvider>().user.token;
-    await ApiService.updateService(
+    final success = await ApiService.updateService(
       serviceId: widget.serviceId,
       data: {'steps': stepsData},
       token: token,
     );
+
+    if (!mounted) return;
+
+    if (!success) {
+      setState(() {
+        _completedSteps[index] = oldValue;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('فشل تحديث الخطوة، حاول مرة أخرى'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _addComment(String text) async {
+    if (text.trim().isEmpty) return;
+    // حالياً نضيف محلياً فقط، يمكن ربطه بـ API لاحقاً
+    setState(() {
+      _comments.insert(0, MemberComment(
+        userName: 'أنت',
+        text: text,
+        date: 'الآن',
+        upVotes: 0,
+        downVotes: 0,
+      ));
+    });
+    // يمكن استدعاء API هنا
+  }
+
+  Future<void> _handleVote(String type) async {
+    if (_isVoting) return;
+    setState(() => _isVoting = true);
+
+    final token = context.read<UserProvider>().user.token;
+    final ok = await ApiService.postVote(
+      serviceId: widget.serviceId,
+      type: type,
+      token: token,
+    );
+
+    setState(() => _isVoting = false);
+
+    if (!mounted) return;
+
+    if (ok) {
+      await _fetchComments();
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('تم التصويت بنجاح'),
+          backgroundColor: const Color(0xFF379777),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('فشل التصويت، حاول مرة أخرى'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 
   Future<void> _approveService() async {
@@ -109,17 +183,17 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
       token: token,
     );
     setState(() => _isApproving = false);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ok ? 'تمت الموافقة على الخدمة ✅' : 'فشلت الموافقة'),
-          backgroundColor: ok ? const Color(0xFF379777) : Colors.red,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'تمت الموافقة على الخدمة ✅' : 'فشلت الموافقة'),
+        backgroundColor: ok ? const Color(0xFF379777) : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+    if (ok) Navigator.pop(context);
   }
 
   Future<void> _rejectService() async {
@@ -130,46 +204,17 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
       token: token,
     );
     setState(() => _isRejecting = false);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ok ? 'تم رفض الخدمة ❌' : 'فشلت العملية'),
-          backgroundColor: ok ? Colors.orange : Colors.red,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
-  }
-  
-  // ----- دالة التصويت -----
-  Future<void> _handleVote(String type) async {
-    if (_isVoting) return;
-    setState(() => _isVoting = true);
-    
-    final token = context.read<UserProvider>().user.token;
-    final ok = await ApiService.postVote(
-      serviceId: widget.serviceId,
-      type: type,
-      token: token,
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'تم رفض الخدمة ❌' : 'فشلت العملية'),
+        backgroundColor: ok ? Colors.orange : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
     );
-    
-    setState(() => _isVoting = false);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ok ? 'تم التصويت بنجاح' : 'فشل التصويت'),
-          backgroundColor: ok ? const Color(0xFF379777) : Colors.red,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      // تحديث التعليقات بعد التصويت
-      if (ok) _fetchComments();
-    }
+    if (ok) Navigator.pop(context);
   }
 
   @override
@@ -202,20 +247,27 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                             style: TextStyle(fontSize: 13, color: Color(0xFFE65100), fontWeight: FontWeight.w600),
                           ),
                         ),
-                        Row(
-                          children: [
-                            // أزرار التصويت
-                            _buildVoteButtons(),
-                            const SizedBox(width: 8),
-                            Text(
-                              'اليوم الجمعة 1 مايو',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(context).textTheme.bodyLarge?.color,
-                                fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildVoteButtons(),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'اليوم الجمعة 1 مايو',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -251,24 +303,26 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _isVoting
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
-            : IconButton(
-                icon: const Icon(Icons.arrow_upward, color: Color(0xFF379777), size: 20),
-                onPressed: () => _handleVote('up'),
-                tooltip: 'تصويت بالموافقة',
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
-        _isVoting
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
-            : IconButton(
-                icon: Icon(Icons.arrow_downward, color: Colors.red.shade600, size: 20),
-                onPressed: () => _handleVote('down'),
-                tooltip: 'تصويت بالرفض',
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
+        if (_isVoting)
+          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
+        else
+          IconButton(
+            icon: const Icon(Icons.arrow_upward, color: Color(0xFF379777), size: 20),
+            onPressed: () => _handleVote('up'),
+            tooltip: 'تصويت بالموافقة',
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
+          ),
+        if (_isVoting)
+          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
+        else
+          IconButton(
+            icon: Icon(Icons.arrow_downward, color: Colors.red.shade600, size: 20),
+            onPressed: () => _handleVote('down'),
+            tooltip: 'تصويت بالرفض',
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
+          ),
       ],
     );
   }
@@ -288,7 +342,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color),
           ),
           const Expanded(child: SizedBox()),
-          _buildAdminActions(),
+          if (widget.isAdmin) _buildAdminActions(),
         ],
       ),
     );
@@ -298,21 +352,23 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _isRejecting
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
-            : IconButton(
-                icon: Icon(Icons.cancel_outlined, color: Colors.red.shade600, size: 24),
-                onPressed: _rejectService,
-                tooltip: 'رفض الخدمة',
-              ),
+        if (_isRejecting)
+          const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
+        else
+          IconButton(
+            icon: Icon(Icons.cancel_outlined, color: Colors.red.shade600, size: 24),
+            onPressed: _rejectService,
+            tooltip: 'رفض الخدمة',
+          ),
         const SizedBox(width: 8),
-        _isApproving
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
-            : IconButton(
-                icon: const Icon(Icons.check_circle_outline, color: Color(0xFF379777), size: 24),
-                onPressed: _approveService,
-                tooltip: 'موافقة على الخدمة',
-              ),
+        if (_isApproving)
+          const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
+        else
+          IconButton(
+            icon: const Icon(Icons.check_circle_outline, color: Color(0xFF379777), size: 24),
+            onPressed: _approveService,
+            tooltip: 'موافقة على الخدمة',
+          ),
       ],
     );
   }
@@ -492,7 +548,10 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => _MembersBottomSheet(comments: _comments),
+      builder: (context) => _MembersBottomSheet(
+        comments: _comments,
+        onAddComment: _addComment,
+      ),
     );
   }
 }
@@ -500,7 +559,10 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
 // ===================== Members Bottom Sheet =====================
 class _MembersBottomSheet extends StatefulWidget {
   final List<MemberComment> comments;
-  const _MembersBottomSheet({required this.comments});
+  final Future<void> Function(String) onAddComment;
+
+  const _MembersBottomSheet({required this.comments, required this.onAddComment});
+
   @override
   State<_MembersBottomSheet> createState() => _MembersBottomSheetState();
 }
@@ -508,6 +570,7 @@ class _MembersBottomSheet extends StatefulWidget {
 class _MembersBottomSheetState extends State<_MembersBottomSheet> {
   final TextEditingController _commentController = TextEditingController();
   late List<MemberComment> _comments;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -519,6 +582,24 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
   void dispose() {
     _commentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _sendComment() async {
+    final text = _commentController.text.trim();
+    if (text.isEmpty || _isSending) return;
+    setState(() => _isSending = true);
+    await widget.onAddComment(text);
+    setState(() {
+      _isSending = false;
+      _commentController.clear();
+      _comments.insert(0, MemberComment(
+        userName: 'أنت',
+        text: text,
+        date: 'الآن',
+        upVotes: 0,
+        downVotes: 0,
+      ));
+    });
   }
 
   @override
@@ -787,25 +868,17 @@ class _MembersBottomSheetState extends State<_MembersBottomSheet> {
         child: Row(
           children: [
             InkWell(
-              onTap: () {
-                if (_commentController.text.trim().isNotEmpty) {
-                  setState(() {
-                    _comments.insert(0, MemberComment(
-                      userName: 'أنت',
-                      text: _commentController.text.trim(),
-                      date: 'الآن',
-                      upVotes: 0,
-                      downVotes: 0,
-                    ));
-                    _commentController.clear();
-                  });
-                }
-              },
+              onTap: _isSending ? null : _sendComment,
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 width: 44, height: 44,
-                decoration: BoxDecoration(color: const Color(0xFF379777), borderRadius: BorderRadius.circular(12)),
-                child: const Center(child: Icon(Icons.add, color: Colors.white, size: 22)),
+                decoration: BoxDecoration(
+                  color: _isSending ? Colors.grey : const Color(0xFF379777),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: _isSending
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Center(child: Icon(Icons.add, color: Colors.white, size: 22)),
               ),
             ),
             const SizedBox(width: 12),

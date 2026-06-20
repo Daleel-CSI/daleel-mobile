@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:provider/provider.dart';
+import 'package:daleel/providers/user_provider.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -11,15 +13,19 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
-  // البيانات الحالية
-  String userName = 'عماد محمد أحمد';
-  String userPhone = '+20 123 456 7890';
-  String userEmail = 'emad.mohamed@example.com';
-  File? userProfileImage;
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final user = context.watch<UserProvider>().user;
+
+    final userName = user.displayName ?? 'مستخدم';
+    final userPhone = user.phone ?? 'غير مضاف';
+    final userEmail = user.email ?? 'غير مضاف';
+
+    // تحديد ما إذا كانت الصورة رابط (http) أم ملف محلي
+    final String? photoUrl = user.photoUrl;
+    final bool isNetworkImage = photoUrl != null && photoUrl.startsWith('http');
+    final bool isFileImage = photoUrl != null && !photoUrl.startsWith('http') && File(photoUrl).existsSync();
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -53,22 +59,27 @@ class _AccountScreenState extends State<AccountScreen> {
                           ],
                         ),
                         child: ClipOval(
-                          child: userProfileImage != null
-                              ? Image.file(
-                                  userProfileImage!,
+                          child: isNetworkImage
+                              ? Image.network(
+                                  photoUrl,
                                   fit: BoxFit.cover,
                                   width: 120,
                                   height: 120,
+                                  // ignore: unnecessary_underscores
+                                  errorBuilder: (_, __, ___) =>
+                                      _defaultAvatar(),
                                 )
-                              : const CircleAvatar(
-                                  radius: 58,
-                                  backgroundColor: Color(0xFFB2E4D0),
-                                  child: Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: Color(0xFF379777),
-                                  ),
-                                ),
+                              : isFileImage
+                                  ? Image.file(
+                                      File(photoUrl),
+                                      fit: BoxFit.cover,
+                                      width: 120,
+                                      height: 120,
+                                      // ignore: unnecessary_underscores
+                                      errorBuilder: (_, __, ___) =>
+                                          _defaultAvatar(),
+                                    )
+                                  : _defaultAvatar(),
                         ),
                       ),
                     ),
@@ -105,7 +116,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
                     const SizedBox(height: 16),
 
-                    // تاريخ الانضمام
+                    // تاريخ الانضمام (مثال ثابت)
                     _buildInfoCard(
                       isDark: isDark,
                       label: 'تاريخ الانضمام',
@@ -121,30 +132,23 @@ class _AccountScreenState extends State<AccountScreen> {
                       height: 56,
                       child: ElevatedButton(
                         onPressed: () async {
-                          // استقبال البيانات المحدثة من صفحة التعديل
-                          final result = await Navigator.push(
+                          final currentUser = context.read<UserProvider>().user;
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => EditAccountScreen(
-                                initialName: userName,
-                                initialPhone: userPhone,
-                                initialEmail: userEmail,
-                                initialImage: userProfileImage,
+                                initialName: currentUser.displayName ?? '',
+                                initialPhone: currentUser.phone ?? '',
+                                initialEmail: currentUser.email ?? '',
+                                initialImage: (currentUser.photoUrl != null &&
+                                        !currentUser.photoUrl!.startsWith('http') &&
+                                        File(currentUser.photoUrl!).existsSync())
+                                    ? File(currentUser.photoUrl!)
+                                    : null,
                               ),
                             ),
                           );
-
-                          // تحديث البيانات إذا تم الحفظ
-                          if (result != null && result is Map<String, dynamic>) {
-                            setState(() {
-                              userName = result['name'] ?? userName;
-                              userPhone = result['phone'] ?? userPhone;
-                              userEmail = result['email'] ?? userEmail;
-                              if (result['image'] != null) {
-                                userProfileImage = result['image'] as File;
-                              }
-                            });
-                          }
+                          // بعد العودة، يتم إعادة بناء الشاشة من UserProvider
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF379777),
@@ -185,6 +189,18 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _defaultAvatar() {
+    return const CircleAvatar(
+      radius: 58,
+      backgroundColor: Color(0xFFB2E4D0),
+      child: Icon(
+        Icons.person,
+        size: 60,
+        color: Color(0xFF379777),
       ),
     );
   }
@@ -306,7 +322,7 @@ class _AccountScreenState extends State<AccountScreen> {
 }
 
 // ==========================================
-// صفحة تعديل الحساب
+// صفحة تعديل الحساب (مع الحفاظ على الوظائف)
 // ==========================================
 
 class EditAccountScreen extends StatefulWidget {
@@ -332,11 +348,10 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _emailController;
-  
+
   final ImagePicker _imagePicker = ImagePicker();
   File? _profileImage;
-  
-  // القيم الأصلية للمقارنة
+
   late String _originalName;
   late String _originalPhone;
   late String _originalEmail;
@@ -344,11 +359,10 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
   @override
   void initState() {
     super.initState();
-    // تهيئة القيم من البيانات المُمررة
     _originalName = widget.initialName;
     _originalPhone = widget.initialPhone;
     _originalEmail = widget.initialEmail;
-    
+
     _nameController = TextEditingController(text: widget.initialName);
     _phoneController = TextEditingController(text: widget.initialPhone);
     _emailController = TextEditingController(text: widget.initialEmail);
@@ -363,15 +377,13 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
     super.dispose();
   }
 
-  // التحقق من وجود تعديلات
   bool _hasChanges() {
     return _nameController.text != _originalName ||
-           _phoneController.text != _originalPhone ||
-           _emailController.text != _originalEmail ||
-           _profileImage != null;
+        _phoneController.text != _originalPhone ||
+        _emailController.text != _originalEmail ||
+        _profileImage != null;
   }
 
-  // إظهار dialog تحذير قبل الخروج
   Future<bool> _onWillPop() async {
     if (_hasChanges()) {
       final result = await _showExitDialog();
@@ -493,7 +505,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
     );
   }
 
-  // دالة لإظهار Dialog اختيار الصورة
   void _showImageSourceDialog() {
     showModalBottomSheet(
       context: context,
@@ -510,7 +521,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -520,8 +530,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            
-            // العنوان
             const Text(
               'اختر مصدر الصورة',
               style: TextStyle(
@@ -530,8 +538,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            
-            // زر الكاميرا
             _buildImageSourceOption(
               icon: Icons.camera_alt,
               title: 'التقاط صورة',
@@ -541,10 +547,7 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
                 _pickImage(ImageSource.camera);
               },
             ),
-            
             const SizedBox(height: 12),
-            
-            // زر المعرض
             _buildImageSourceOption(
               icon: Icons.photo_library,
               title: 'اختيار من المعرض',
@@ -554,10 +557,7 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
                 _pickImage(ImageSource.gallery);
               },
             ),
-            
             const SizedBox(height: 12),
-            
-            // زر إلغاء
             SizedBox(
               width: double.infinity,
               child: TextButton(
@@ -578,7 +578,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
                 ),
               ),
             ),
-            
             SizedBox(height: MediaQuery.of(context).padding.bottom),
           ],
         ),
@@ -593,7 +592,7 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
     required VoidCallback onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -650,7 +649,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
     );
   }
 
-  // دالة لاختيار الصورة
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? pickedFile = await _imagePicker.pickImage(
@@ -665,7 +663,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
           _profileImage = File(pickedFile.path);
         });
 
-        // إظهار رسالة نجاح
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -692,7 +689,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
         }
       }
     } catch (e) {
-      // إظهار رسالة خطأ
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -722,15 +718,16 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
 
   void _saveChanges() {
     if (_formKey.currentState!.validate()) {
-      // إرجاع البيانات المحدثة للصفحة السابقة
-      Navigator.pop(context, {
-        'name': _nameController.text,
-        'phone': _phoneController.text,
-        'email': _emailController.text,
-        'image': _profileImage,
-      });
-      
-      // إظهار رسالة نجاح
+      final userProvider = context.read<UserProvider>();
+      userProvider.updateUserInfo(
+        displayName: _nameController.text,
+        email: _emailController.text,
+        phone: _phoneController.text,
+        photoUrl: _profileImage?.path,
+      );
+
+      Navigator.pop(context);
+
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -782,7 +779,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // صورة البروفايل مع زر التعديل
                         Center(
                           child: Stack(
                             children: [
@@ -858,7 +854,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
 
                         const SizedBox(height: 30),
 
-                        // الاسم الكامل
                         const Text(
                           'الاسم الكامل',
                           style: TextStyle(
@@ -881,7 +876,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
 
                         const SizedBox(height: 20),
 
-                        // رقم الهاتف
                         const Text(
                           'رقم الهاتف',
                           style: TextStyle(
@@ -905,7 +899,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
 
                         const SizedBox(height: 20),
 
-                        // البريد الإلكتروني
                         const Text(
                           'البريد الإلكتروني',
                           style: TextStyle(
@@ -932,7 +925,6 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
 
                         const SizedBox(height: 30),
 
-                        // زر الحفظ
                         SizedBox(
                           width: double.infinity,
                           height: 56,
@@ -1032,13 +1024,15 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
     String? Function(String?)? validator,
     TextInputType? keyboardType,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return TextFormField(
       controller: controller,
       textAlign: TextAlign.right,
       keyboardType: keyboardType,
       style: const TextStyle(fontSize: 16),
       validator: validator,
-      cursorColor: const Color(0xFF379777), // 👈 لون الـ cursor
+      cursorColor: const Color(0xFF379777),
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: TextStyle(
@@ -1046,9 +1040,7 @@ class _EditAccountScreenState extends State<EditAccountScreen> {
           fontSize: 14,
         ),
         filled: true,
-        fillColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF2A2A2A)
-            : Colors.grey.shade50,
+        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade50,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 18,

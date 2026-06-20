@@ -75,6 +75,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         headers: {'Authorization': 'Bearer $token'},
       );
 
+      // ✅ تأكد إن الـ widget لسه موجود في الشجرة قبل أي setState أو context بعد await
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         final dynamic decoded = json.decode(response.body);
         final List<dynamic> dataList = (decoded is List)
@@ -98,6 +101,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         setState(() => _error = 'فشل البحث، حاول مرة أخرى');
       }
     } catch (e) {
+      // ✅ نفس الفحص جوه catch، لأن الخطأ ممكن يحصل بعد ما الـ widget يتشال
+      if (!mounted) return;
       setState(() => _error = 'خطأ في الاتصال');
     } finally {
       if (mounted) setState(() => _isSearching = false);

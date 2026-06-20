@@ -65,13 +65,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Trigger service loading after first frame with error handling
     Future.microtask(() async {
       // ignore: use_build_context_synchronously
       final token = context.read<UserProvider>().user.token;
+      // ignore: use_build_context_synchronously
+      final provider = context.read<ServicesProvider>();
+      if (provider.categoriesList.isEmpty) {
+        await provider.fetchCategories(token: token);
+      }
       try {
-        // ignore: use_build_context_synchronously
-        await context.read<ServicesProvider>().fetchAndSetServices(token: token);
+        await provider.fetchAndSetServices(token: token);
       } catch (e) {
         debugPrint('❌ Error loading services in HomePage: $e');
       }
@@ -119,7 +122,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             begin: const Offset(1.0, 0.0),
             end: Offset.zero,
           ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOut));
-
           return SlideTransition(position: offsetAnimation, child: child);
         },
         child: IndexedStack(
@@ -173,6 +175,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  // ========== الهيدر (معدل لإصلاح التجاوز) ==========
   Widget _buildHeader(String userName) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -180,26 +183,33 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _buildNotificationBell(),
-          Row(
-            children: [
-              Text(
-                userName,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF379777),
+          Expanded(  // ✅ إضافة Expanded لمنع التجاوز
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(  // ✅ استخدام Flexible للنص الطويل
+                  child: Text(
+                    userName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF379777),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'مرحبا',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                const SizedBox(width: 8),
+                Text(
+                  'مرحبا',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -475,7 +485,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  // ========== قسم "اكتشف مشاوير جديدة" ==========
   Widget _buildDiscoverSection(String userName) {
+    final categories = context.watch<ServicesProvider>().categoriesList;
+    final displayCategories = categories.length >= 6 ? categories.sublist(0, 6) : categories;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -490,22 +504,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(height: 20),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 0.85,
-            children: [
-              _buildServiceCard('الجيش', 'assets/icons/army.svg', userName, categoryId: 'army'),
-              _buildServiceCard('التخرج الجامعي', 'assets/icons/graduation.svg', userName, categoryId: 'graduation'),
-              _buildServiceCard('السفر للخارج', 'assets/icons/Container-4.svg', userName, categoryId: 'travel'),
-              _buildServiceCard('الزواج', 'assets/icons/Component 1.svg', userName, categoryId: 'marriage'),
-              _buildServiceCard('ترخيص السيارات', 'assets/icons/car_license.svg', userName, categoryId: 'car_license'),
-              _buildServiceCard('المرور', 'assets/icons/Container-12.svg', userName, categoryId: 'traffic'),
-            ],
-          ),
+          if (categories.isEmpty)
+            const Center(child: CircularProgressIndicator(color: Color(0xFF379777)))
+          else
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 3,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 0.85,
+              children: displayCategories.map((category) {
+                return _buildServiceCard(
+                  category.name,
+                  category.iconPath.isNotEmpty ? category.iconPath : 'assets/icons/more.svg',
+                  userName,
+                  categoryId: category.id,
+                );
+              }).toList(),
+            ),
         ],
       ),
     );
@@ -513,7 +530,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Widget _buildServiceCard(
     String title,
-    String? svgPath,
+    String svgPath,
     String userName, {
     required String categoryId,
     bool isMore = false,
@@ -528,7 +545,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             builder: (context) => CategoryServicesScreen(
               categoryId: categoryId,
               categoryTitle: title,
-              categoryIcon: svgPath ?? 'assets/icons/more.svg',
+              categoryIcon: svgPath,
               userName: userName,
             ),
           ),
@@ -536,6 +553,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       },
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 50,
@@ -551,25 +569,30 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ? const Icon(Icons.more_horiz,
                       size: 28, color: Color(0xFF379777))
                   : SvgPicture.asset(
-                      svgPath!,
+                      svgPath,
                       width: 28,
                       height: 28,
                       colorFilter: const ColorFilter.mode(
                           Color(0xFF379777), BlendMode.srcIn),
+                      placeholderBuilder: (context) =>
+                          const Icon(Icons.category, color: Color(0xFF379777)),
                     ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
               title,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Theme.of(context).textTheme.bodyLarge?.color,
-                height: 1.3,
+                height: 1.2,
               ),
             ),
           ),
@@ -578,6 +601,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  // ========== قسم "الأكثر شيوعاً" ==========
   Widget _buildPopularSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),

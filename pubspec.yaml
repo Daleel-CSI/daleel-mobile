@@ -31,7 +31,8 @@ dependencies:
   change_app_package_name: ^1.5.0
   google_sign_in: ^6.2.1
   dio: ^5.9.2
-
+  dio_cookie_manager: ^3.1.0
+  cookie_jar: ^4.0.0
 flutter_launcher_icons:
   android: true
   image_path: "assets/images/daleel-01.png"

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:daleel/home_page.dart';
+import 'package:daleel/providers/user_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String email;
@@ -154,8 +156,60 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       debugPrint('🔹 Verify OTP Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        // ========== استخراج التوكن وبيانات المستخدم وحفظهم (كانت ناقصة) ==========
+        Map<String, dynamic> data = {};
+        try {
+          final decoded = json.decode(response.body);
+          if (decoded is Map<String, dynamic>) data = decoded;
+        } catch (_) {}
+
+        // استخراج الكوكي لو السيرفر بيرجعه في الهيدر
+        String? cookie;
+        final setCookie = response.headers['set-cookie'];
+        if (setCookie != null) {
+          final match = RegExp(r'connect\.sid=([^;]+)').firstMatch(setCookie);
+          if (match != null) cookie = match.group(1);
+        }
+
+        // استخراج التوكن من الرد (نفس منطق شاشة تسجيل الدخول)
+        String? token = data['token']?.toString() ??
+            data['data']?['token']?.toString() ??
+            data['accessToken']?.toString();
+        if (token == null && cookie != null) {
+          token = 'cookie_$cookie';
+        }
+
+        if (token == null || token.isEmpty) {
+          debugPrint('⚠️ Verify OTP succeeded but no token/cookie found in response');
+          _showSnackBar('تم التحقق، لكن تعذر بدء الجلسة، يرجى تسجيل الدخول', isError: true);
+          setState(() => _isVerifying = false);
+          return;
+        }
+
+        final userData = (data['user'] is Map<String, dynamic>)
+            ? data['user'] as Map<String, dynamic>
+            : (data['data'] is Map<String, dynamic>)
+                ? data['data'] as Map<String, dynamic>
+                : data;
+
+        final user = User(
+          displayName: userData['username']?.toString() ??
+              userData['name']?.toString() ??
+              widget.email.split('@').first,
+          email: userData['email']?.toString() ?? widget.email,
+          photoUrl: userData['photoUrl']?.toString(),
+          token: token,
+          phone: userData['phone']?.toString(),
+          cookie: cookie,
+        );
+
+        // ignore: use_build_context_synchronously
+        context.read<UserProvider>().updateUser(user);
+        debugPrint('✅ User logged in after OTP, token saved: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+
         _showSnackBar('تم التحقق بنجاح');
         Navigator.pushReplacement(
+          // ignore: use_build_context_synchronously
           context,
           MaterialPageRoute(builder: (_) => const HomePage()),
         );

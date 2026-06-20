@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:convert';
 import 'package:daleel/home_page.dart';
 import 'package:daleel/providers/user_provider.dart';
@@ -8,6 +10,7 @@ import 'package:daleel/screen/auth/widgets/auth_text_field.dart';
 import 'package:daleel/screen/auth/otp_verification_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 
 // ============================================================
 //                          AUTH SCREEN
@@ -26,7 +29,9 @@ class _AuthScreenState extends State<AuthScreen>
   late AnimationController _animationController;
   int _currentPage = 0;
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
 
   @override
   void initState() {
@@ -49,9 +54,6 @@ class _AuthScreenState extends State<AuthScreen>
     super.dispose();
   }
 
-  // -------------------------------------------------------
-  // استدعاء /auth/me لجلب بيانات المستخدم الكاملة
-  // -------------------------------------------------------
   Future<User?> _fetchUserFromToken(String token) async {
     try {
       final url = Uri.parse(
@@ -74,6 +76,7 @@ class _AuthScreenState extends State<AuthScreen>
             email: userData['email'],
             photoUrl: userData['photoUrl'],
             token: token,
+            phone: userData['phone'],
           );
         }
       }
@@ -81,17 +84,11 @@ class _AuthScreenState extends State<AuthScreen>
     return null;
   }
 
-  // -------------------------------------------------------
-  // دالة مساعدة لتكوين اسم العرض البديل (لا تطلب من المستخدم)
-  // -------------------------------------------------------
   String _fallbackDisplayName(String? email) {
     if (email == null || email.isEmpty) return 'مستخدم';
     return email.split('@').first;
   }
 
-  // -------------------------------------------------------
-  // Google Sign‑In
-  // -------------------------------------------------------
   Future<void> _handleGoogleSignIn() async {
     try {
       final GoogleSignInAccount? account = await _googleSignIn.signIn();
@@ -103,17 +100,16 @@ class _AuthScreenState extends State<AuthScreen>
         photoUrl: account.photoUrl,
       );
 
-      // إذا لم يقدم غوغل اسم مستخدم، نستخدم fallback
       if (user.displayName == null || user.displayName!.isEmpty) {
         final updatedUser = User(
           displayName: _fallbackDisplayName(user.email),
           email: user.email,
           photoUrl: user.photoUrl,
         );
+        // ignore: duplicate_ignore
         // ignore: use_build_context_synchronously
         context.read<UserProvider>().updateUser(updatedUser);
       } else {
-        // ignore: use_build_context_synchronously
         context.read<UserProvider>().updateUser(user);
       }
 
@@ -130,11 +126,8 @@ class _AuthScreenState extends State<AuthScreen>
 
   void _onTabChanged(int index) {
     setState(() => _currentPage = index);
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    _pageController.animateToPage(index,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
     if (index == 0) {
       _animationController.reverse();
     } else {
@@ -211,9 +204,7 @@ class _AuthScreenState extends State<AuthScreen>
             fontWeight: FontWeight.w600,
           ),
         ),
-        backgroundColor: isError
-            ? Colors.red.shade600
-            : const Color(0xFF379777),
+        backgroundColor: isError ? Colors.red.shade600 : const Color(0xFF379777),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -253,7 +244,10 @@ class _LoginContentState extends State<_LoginContent> {
     super.dispose();
   }
 
+  // ========== تسجيل الدخول باستخدام Dio (بدون CookieManager) ==========
   Future<void> _handleLogin() async {
+    print('🟢 _handleLogin called');
+
     final email = _emailCtrl.text.trim();
     final password = _passCtrl.text;
     if (email.isEmpty || password.isEmpty) {
@@ -262,77 +256,108 @@ class _LoginContentState extends State<_LoginContent> {
     }
     setState(() => _isLoading = true);
     try {
-      final url = Uri.parse(
-        'https://auth-login-for-daleel1.vercel.app/auth/login',
-      );
-      final body = {'email': email, 'password': password};
-      final response = await http.post(
-        url,
+      final dio = Dio(BaseOptions(
+        baseUrl: 'https://auth-login-for-daleel1.vercel.app',
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(body),
+        connectTimeout: const Duration(seconds: 30),
+      ));
+
+      print('🟡 Sending login request...');
+      final response = await dio.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
       );
+
       if (!mounted) return;
 
+      print('📡 Login Response Status: ${response.statusCode}');
+      print('📦 Login Response Headers: ${response.headers}');
+      print('📦 Login Response Body: ${response.data}');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
-        final token = data['token'] ?? data['data']?['token'];
+        final data = response.data;
 
-        // نحاول جلب بيانات المستخدم من /auth/me
-        User? user;
-        if (token != null) {
-          user = await widget.fetchUserFromToken(token);
-        }
+        // ✅ الإصلاح الجذري: الباك إند Supabase Auth حقيقي، والتوكن الصحيح
+        // (JWT access_token) بيرجع جوه data['session']['access_token']
+        // مش في data['token'] (مش موجود) ومش في الكوكي (connect.sid مالوش
+        // علاقة بالـ Supabase auth، وده سبب الـ 401 "Invalid token" اللي
+        // كنا بنواجهه في POST /services وأي route تاني بيتحقق من JWT حقيقي)
+        String? token = data['session']?['access_token'] ??
+            data['access_token'] ??
+            data['token'] ??
+            data['data']?['token'];
 
-        // لو ما جبش بيانات من /me أو مفيش token، نكون user من بيانات login
-        if (user == null) {
-          final dynamic userData = data['user'] ?? data['data'] ?? data;
-          String? userName;
-          String? userEmail;
-          String? photoUrl;
-          if (userData is Map<String, dynamic>) {
-            userName =
-                userData['username'] ??
-                userData['name'] ??
-                userData['fullName'] ??
-                userData['displayName'];
-            userEmail = userData['email'] ?? email;
-            photoUrl = userData['photoUrl'];
+        String? cookie;
+        final setCookieList = response.headers['set-cookie'];
+        if (setCookieList != null && setCookieList.isNotEmpty) {
+          final setCookie = setCookieList.first;
+          final match = RegExp(r'connect\.sid=([^;]+)').firstMatch(setCookie);
+          if (match != null) {
+            cookie = match.group(1);
           }
-          user = User(
-            displayName: userName,
-            email: userEmail ?? email,
-            photoUrl: photoUrl,
-            token: token,
-          );
         }
 
-        // إذا بقى الاسم فاضي، استخدم fallback من الايميل
-        if (user.displayName == null || user.displayName!.isEmpty) {
-          user = User(
-            displayName: widget.fallbackDisplayName(user.email),
-            email: user.email,
-            photoUrl: user.photoUrl,
-            token: user.token,
-          );
+        // fallback أخير فقط لو مفيش access_token خالص (حالة غير متوقعة)
+        if (token == null && cookie != null) {
+          token = 'cookie_$cookie';
         }
 
-        // ignore: use_build_context_synchronously
+        if (token == null || token.isEmpty) {
+          _showLocalSnackBar('لم يتم استلام جلسة صالحة من الخادم', isError: true);
+          setState(() => _isLoading = false);
+          return;
+        }
+
+        final userData = data['user'] ?? data['data'] ?? data;
+        String? displayName = userData['user_metadata']?['username'] ??
+            userData['username'] ??
+            userData['name'] ??
+            userData['fullName'] ??
+            userData['displayName'];
+        String? emailUser = userData['email'];
+        String? photoUrl = userData['user_metadata']?['avatar_url'] ??
+            userData['photoUrl'] ??
+            userData['picture'];
+        String? phone = userData['user_metadata']?['phone'] ??
+            userData['phone'];
+
+        if (displayName == null || displayName.isEmpty) {
+          displayName = widget.fallbackDisplayName(emailUser);
+        }
+
+        final user = User(
+          displayName: displayName,
+          email: emailUser ?? email,
+          photoUrl: photoUrl,
+          token: token,
+          phone: phone,
+          cookie: cookie,
+        );
+
         context.read<UserProvider>().updateUser(user);
+        print('✅ User updated with token: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+
         Navigator.pushReplacement(
-          // ignore: use_build_context_synchronously
           context,
           MaterialPageRoute(builder: (_) => const HomePage()),
         );
       } else {
         String errorMsg = 'فشل تسجيل الدخول';
         try {
-          final errorData = json.decode(response.body);
-          errorMsg = errorData['message'] ?? errorData['error'] ?? errorMsg;
+          errorMsg = response.data['message'] ?? response.data['error'] ?? errorMsg;
         } catch (_) {}
         _showLocalSnackBar(errorMsg, isError: true);
+        setState(() => _isLoading = false);
       }
     } catch (e) {
+      print('❌ Login Error: $e');
+      if (e is DioException) {
+        print('❌ Dio Error Type: ${e.type}');
+        print('❌ Dio Error Message: ${e.message}');
+        print('❌ Dio Error Response: ${e.response?.data}');
+      }
       if (mounted) _showLocalSnackBar('حدث خطأ في الاتصال: $e', isError: true);
+      setState(() => _isLoading = false);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -348,9 +373,7 @@ class _LoginContentState extends State<_LoginContent> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        backgroundColor: isError
-            ? Colors.red.shade600
-            : const Color(0xFF379777),
+        backgroundColor: isError ? Colors.red.shade600 : const Color(0xFF379777),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -584,7 +607,12 @@ class _LoginContentState extends State<_LoginContent> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleLogin,
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          print('🟢 Login button pressed!');
+                          _handleLogin();
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF379777),
                     foregroundColor: Colors.white,
@@ -619,16 +647,16 @@ class _LoginContentState extends State<_LoginContent> {
   }
 
   Widget _buildLabel(String text) => Align(
-    alignment: Alignment.centerRight,
-    child: Text(
-      text,
-      style: const TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-        color: Colors.black87,
-      ),
-    ),
-  );
+        alignment: Alignment.centerRight,
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+      );
 }
 
 // ============================================================
@@ -762,7 +790,6 @@ class _SignupContentState extends State<_SignupContent> {
         );
         _showLocalSnackBar('تم إنشاء الحساب وإرسال رمز التحقق إلى بريدك');
         Navigator.pushReplacement(
-          // ignore: use_build_context_synchronously
           context,
           MaterialPageRoute(
             builder: (_) => OtpVerificationScreen(email: email),
@@ -793,9 +820,7 @@ class _SignupContentState extends State<_SignupContent> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        backgroundColor: isError
-            ? Colors.red.shade600
-            : const Color(0xFF379777),
+        backgroundColor: isError ? Colors.red.shade600 : const Color(0xFF379777),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -885,203 +910,204 @@ class _SignupContentState extends State<_SignupContent> {
     TextEditingController ctrl, {
     required String hint,
     TextInputType? keyboardType,
-  }) => Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-          color: Colors.black87,
-        ),
-      ),
-      const SizedBox(height: 10),
-      AuthTextField(
-        hintText: hint,
-        controller: ctrl,
-        keyboardType: keyboardType,
-      ),
-    ],
-  );
+  }) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 10),
+          AuthTextField(
+            hintText: hint,
+            controller: ctrl,
+            keyboardType: keyboardType,
+          ),
+        ],
+      );
 
   Widget _buildDateField() => Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      const Text(
-        'تاريخ الميلاد',
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-          color: Colors.black87,
-        ),
-      ),
-      const SizedBox(height: 10),
-      GestureDetector(
-        onTap: _selectDate,
-        child: AbsorbPointer(
-          child: AuthTextField(
-            hintText: 'يوم/شهر/سنة',
-            controller: _dateCtrl,
-            suffixIcon: const Icon(
-              Icons.calendar_today_outlined,
-              color: Color(0xFF379777),
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const Text(
+            'تاريخ الميلاد',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: Colors.black87,
             ),
           ),
-        ),
-      ),
-    ],
-  );
-
-  Widget _buildPasswordField() => Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      const Text(
-        'كلمة المرور',
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-          color: Colors.black87,
-        ),
-      ),
-      const SizedBox(height: 10),
-      AuthTextField(
-        hintText: 'أدخل كلمة المرور',
-        isPassword: !_isPasswordVisible,
-        controller: _passCtrl,
-        suffixIcon: IconButton(
-          icon: Icon(
-            _isPasswordVisible
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            color: Colors.grey.shade600,
-          ),
-          onPressed: () =>
-              setState(() => _isPasswordVisible = !_isPasswordVisible),
-        ),
-      ),
-    ],
-  );
-
-  Widget _passwordRequirements() => Container(
-    margin: const EdgeInsets.only(top: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.grey.shade50,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: Colors.grey.shade200),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'يجب أن تحتوي كلمة المرور على:',
-          style: TextStyle(
-            color: Colors.grey.shade700,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _ReqWidget(text: '8 أحرف على الأقل', met: _hasMinLength),
-        _ReqWidget(text: 'حرف كبير (A-Z)', met: _hasUpperCase),
-        _ReqWidget(text: 'حرف صغير (a-z)', met: _hasLowerCase),
-        _ReqWidget(text: 'رقم (0-9)', met: _hasNumber),
-        _ReqWidget(text: 'رمز خاص (!@#\$%)', met: _hasSpecialChar),
-      ],
-    ),
-  );
-
-  Widget _buildConfirmPasswordField() => Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      const Text(
-        'تأكيد كلمة المرور',
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-          color: Colors.black87,
-        ),
-      ),
-      const SizedBox(height: 10),
-      AuthTextField(
-        hintText: 'أعد إدخال كلمة المرور',
-        isPassword: !_isConfirmPasswordVisible,
-        controller: _confirmPassCtrl,
-        suffixIcon: IconButton(
-          icon: Icon(
-            _isConfirmPasswordVisible
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            color: Colors.grey.shade600,
-          ),
-          onPressed: () => setState(
-            () => _isConfirmPasswordVisible = !_isConfirmPasswordVisible,
-          ),
-        ),
-      ),
-    ],
-  );
-
-  Widget _buildMatchIndicator() => Padding(
-    padding: const EdgeInsets.only(top: 8),
-    child: Row(
-      children: [
-        Icon(
-          _passwordsMatch ? Icons.check_circle : Icons.cancel,
-          size: 16,
-          color: _passwordsMatch ? Colors.green : Colors.red,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          _passwordsMatch ? 'كلمة المرور متطابقة' : 'كلمة المرور غير متطابقة',
-          style: TextStyle(
-            color: _passwordsMatch ? Colors.green : Colors.red,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _buildBottomButton() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 24),
-    child: Column(
-      children: [
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _handleSignup,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF379777),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _selectDate,
+            child: AbsorbPointer(
+              child: AuthTextField(
+                hintText: 'يوم/شهر/سنة',
+                controller: _dateCtrl,
+                suffixIcon: const Icon(
+                  Icons.calendar_today_outlined,
+                  color: Color(0xFF379777),
+                ),
               ),
             ),
-            child: _isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    'التالي',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
           ),
+        ],
+      );
+
+  Widget _buildPasswordField() => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const Text(
+            'كلمة المرور',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 10),
+          AuthTextField(
+            hintText: 'أدخل كلمة المرور',
+            isPassword: !_isPasswordVisible,
+            controller: _passCtrl,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isPasswordVisible
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: Colors.grey.shade600,
+              ),
+              onPressed: () =>
+                  setState(() => _isPasswordVisible = !_isPasswordVisible),
+            ),
+          ),
+        ],
+      );
+
+  Widget _passwordRequirements() => Container(
+        margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
         ),
-        const SizedBox(height: 40),
-      ],
-    ),
-  );
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'يجب أن تحتوي كلمة المرور على:',
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _ReqWidget(text: '8 أحرف على الأقل', met: _hasMinLength),
+            _ReqWidget(text: 'حرف كبير (A-Z)', met: _hasUpperCase),
+            _ReqWidget(text: 'حرف صغير (a-z)', met: _hasLowerCase),
+            _ReqWidget(text: 'رقم (0-9)', met: _hasNumber),
+            _ReqWidget(text: 'رمز خاص (!@#\$%)', met: _hasSpecialChar),
+          ],
+        ),
+      );
+
+  Widget _buildConfirmPasswordField() => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const Text(
+            'تأكيد كلمة المرور',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 10),
+          AuthTextField(
+            hintText: 'أعد إدخال كلمة المرور',
+            isPassword: !_isConfirmPasswordVisible,
+            controller: _confirmPassCtrl,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isConfirmPasswordVisible
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: Colors.grey.shade600,
+              ),
+              onPressed: () => setState(
+                () => _isConfirmPasswordVisible = !_isConfirmPasswordVisible,
+              ),
+            ),
+          ),
+        ],
+      );
+
+  Widget _buildMatchIndicator() => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            Icon(
+              _passwordsMatch ? Icons.check_circle : Icons.cancel,
+              size: 16,
+              color: _passwordsMatch ? Colors.green : Colors.red,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _passwordsMatch ? 'كلمة المرور متطابقة' : 'كلمة المرور غير متطابقة',
+              style: TextStyle(
+                color: _passwordsMatch ? Colors.green : Colors.red,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildBottomButton() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _handleSignup,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF379777),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'التالي',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
+      );
 }
 
 class _ReqWidget extends StatelessWidget {
@@ -1090,26 +1116,26 @@ class _ReqWidget extends StatelessWidget {
   const _ReqWidget({required this.text, required this.met});
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Icon(
-          met ? Icons.check_circle : Icons.radio_button_unchecked,
-          size: 16,
-          color: met ? Colors.green : Colors.grey.shade400,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Icon(
+              met ? Icons.check_circle : Icons.radio_button_unchecked,
+              size: 16,
+              color: met ? Colors.green : Colors.grey.shade400,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TextStyle(
+                color: met ? Colors.green : Colors.grey.shade600,
+                fontWeight: met ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Text(
-          text,
-          style: TextStyle(
-            color: met ? Colors.green : Colors.grey.shade600,
-            fontWeight: met ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 12,
-          ),
-        ),
-      ],
-    ),
-  );
+      );
 }
 
 // ============================================================

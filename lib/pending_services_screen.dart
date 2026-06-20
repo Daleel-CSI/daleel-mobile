@@ -43,6 +43,9 @@ class _PendingServicesScreenState extends State<PendingServicesScreen> {
         headers: {'Authorization': 'Bearer $token'},
       );
 
+      // ✅ تأكد إن الـ widget لسه موجود في الشجرة قبل أي setState أو context بعد await
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         final dynamic decoded = json.decode(response.body);
         final List<dynamic> dataList = (decoded is List)
@@ -58,6 +61,8 @@ class _PendingServicesScreenState extends State<PendingServicesScreen> {
         setState(() => _error = 'فشل تحميل الخدمات المعلقة');
       }
     } catch (e) {
+      // ✅ نفس الفحص جوه catch، لأن الخطأ ممكن يحصل بعد ما الـ widget يتشال
+      if (!mounted) return;
       setState(() => _error = 'خطأ في الاتصال');
     } finally {
       if (mounted) setState(() => _isLoading = false);

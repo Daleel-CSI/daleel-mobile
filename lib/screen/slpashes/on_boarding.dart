@@ -1,4 +1,3 @@
-
 import 'package:daleel/screen/auth/auth_screen.dart';
 import 'package:daleel/widgets/onboarding_page_content.dart';
 import 'package:flutter/material.dart';

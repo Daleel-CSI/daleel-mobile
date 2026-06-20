@@ -1,3 +1,7 @@
+// ============================================================
+//                      settings_screen.dart
+// ============================================================
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:daleel/api/api_service.dart';
 import 'package:daleel/providers/theme_provider.dart';
 import 'package:daleel/providers/user_provider.dart';
+import 'package:daleel/screen/auth/auth_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -31,7 +36,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final token = context.read<UserProvider>().user.token;
+    final userProvider = context.read<UserProvider>();
+    final token = userProvider.token;
+
     final settings = await ApiService.getSettings(token: token);
     if (!mounted) return;
 
@@ -53,28 +60,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  void _showSessionExpiredDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'انتهت الجلسة',
+          textAlign: TextAlign.right,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى للمتابعة.',
+          textAlign: TextAlign.right,
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen(startWithLogin: true)),
+              );
+            },
+            child: const Text('تسجيل الدخول'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleThemeToggle(bool value) async {
     context.read<ThemeProvider>().toggleTheme();
     setState(() => _isSavingTheme = true);
-    final token = context.read<UserProvider>().user.token;
+    final userProvider = context.read<UserProvider>();
+    final token = userProvider.token;
+
     final ok = await ApiService.updateThemeSetting(
       darkMode: value,
       token: token,
     );
+
     setState(() => _isSavingTheme = false);
 
     if (!mounted) return;
     if (!ok) {
       context.read<ThemeProvider>().toggleTheme();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('فشل حفظ التفضيل، تم إعادة الوضع السابق'),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+
+      if (token == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى.'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        _showSessionExpiredDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('فشل حفظ التفضيل، حاول مرة أخرى.'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 
@@ -83,25 +140,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _notificationsEnabled = value;
       _isSavingNotifications = true;
     });
-    final token = context.read<UserProvider>().user.token;
+
+    final userProvider = context.read<UserProvider>();
+    final token = userProvider.token;
+
     final ok = await ApiService.updateNotificationSetting(
       enabled: value,
       token: token,
     );
+
     setState(() => _isSavingNotifications = false);
 
     if (!mounted) return;
     if (!ok) {
       setState(() => _notificationsEnabled = !value);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('فشل حفظ تفضيل الإشعارات'),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+
+      if (token == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى.'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        _showSessionExpiredDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('فشل حفظ الإشعارات، حاول مرة أخرى.'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 
@@ -113,9 +189,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: _isLoadingSettings
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFF379777)),
-              )
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF379777)))
             : Column(
                 children: [
                   _buildHeader(context),
@@ -189,24 +263,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Color(0xFF379777), size: 20),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF379777), size: 20),
             style: IconButton.styleFrom(
               backgroundColor: const Color(0xFF379777).withOpacity(0.1),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const Expanded(
@@ -225,11 +292,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: Color(0xFF379777),
-      ),
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF379777)),
     );
   }
 
@@ -244,10 +307,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-          width: 1.5,
-        ),
+        border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
@@ -259,14 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Row(
         children: [
           loading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF379777),
-                  ),
-                )
+              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
               : Switch(
                   value: value,
                   onChanged: loading ? null : onChanged,
@@ -278,18 +331,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text(
-                  'الوضع الليلي',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                const Text('الوضع الليلي', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  'تفعيل المظهر الداكن',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                ),
+                Text('تفعيل المظهر الداكن', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
               ],
             ),
           ),
@@ -304,10 +348,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'assets/icons/moon-eclipse.svg',
               width: 24,
               height: 24,
-              colorFilter: const ColorFilter.mode(
-                Color(0xFF379777),
-                BlendMode.srcIn,
-              ),
+              colorFilter: const ColorFilter.mode(Color(0xFF379777), BlendMode.srcIn),
             ),
           ),
         ],
@@ -326,10 +367,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-          width: 1.5,
-        ),
+        border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
@@ -341,14 +379,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Row(
         children: [
           loading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF379777),
-                  ),
-                )
+              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF379777)))
               : Switch(
                   value: value,
                   onChanged: loading ? null : onChanged,
@@ -360,18 +391,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text(
-                  'الإشعارات',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                const Text('الإشعارات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  'تلقي الإشعارات والتنبيهات',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                ),
+                Text('تلقي الإشعارات والتنبيهات', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
               ],
             ),
           ),
@@ -386,10 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'assets/icons/notification.svg',
               width: 24,
               height: 24,
-              colorFilter: const ColorFilter.mode(
-                Color(0xFF379777),
-                BlendMode.srcIn,
-              ),
+              colorFilter: const ColorFilter.mode(Color(0xFF379777), BlendMode.srcIn),
             ),
           ),
         ],
@@ -411,10 +430,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-            width: 1.5,
-          ),
+          border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
@@ -431,18 +447,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
+                  Text(subtitle, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
                 ],
               ),
             ),
@@ -457,10 +464,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon,
                 width: 24,
                 height: 24,
-                colorFilter: const ColorFilter.mode(
-                  Color(0xFF379777),
-                  BlendMode.srcIn,
-                ),
+                colorFilter: const ColorFilter.mode(Color(0xFF379777), BlendMode.srcIn),
               ),
             ),
           ],
@@ -473,9 +477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'مسح ذاكرة التخزين المؤقت',
           textAlign: TextAlign.right,
@@ -498,9 +500,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF379777),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: const Text('مسح'),
           ),
@@ -511,12 +511,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _clearCache() async {
     setState(() => _isClearingCache = true);
-    final token = context.read<UserProvider>().user.token;
-    // استدعاء الخادم (اختياري – لا نوقف العملية إن فشل)
+    final userProvider = context.read<UserProvider>();
+    final token = userProvider.token;
+
     await ApiService.clearServerCache(token: token);
-    // مسح الكاش المحلي
-    PaintingBinding.instance.imageCache?.clear();
-    PaintingBinding.instance.imageCache?.clearLiveImages();
+
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
     setState(() => _isClearingCache = false);
     _showSnackBar('تم مسح ذاكرة التخزين المؤقت بنجاح');
   }
@@ -546,9 +547,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         backgroundColor: const Color(0xFF379777),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
       ),
     );

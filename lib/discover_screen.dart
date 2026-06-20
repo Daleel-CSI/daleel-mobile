@@ -37,6 +37,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (provider.categoriesList.isEmpty) {
       setState(() => _isLoadingCategories = true);
       await provider.fetchCategories(token: token);
+      // ✅ تأكد إن الـ widget لسه موجود في الشجرة قبل أي setState بعد await
+      if (!mounted) return;
       setState(() => _isLoadingCategories = false);
     }
   }

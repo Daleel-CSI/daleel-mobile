@@ -112,7 +112,6 @@ class Category {
   factory Category.fromJson(Map<String, dynamic> json) {
     final id =
         (json['_id'] ?? json['category_id'] ?? json['id'])?.toString() ?? '';
-
     return Category(
       id: id,
       name: json['name'] ?? json['category_name'] ?? id,
@@ -130,11 +129,11 @@ class ServicesProvider with ChangeNotifier {
   Map<String, List<ServiceItem>> get categories => _categories;
   bool get isLoading => _isLoading;
 
-  // قائمة الفئات الديناميكية
+  // قائمة الفئات الديناميكية (من GET /categories)
   List<Category> _categoriesList = [];
   List<Category> get categoriesList => _categoriesList;
 
-  /// تحميل الخدمات من السيرفر
+  /// تحميل الخدمات من السيرفر (GET /services)
   Future<void> fetchAndSetServices({String? token}) async {
     _isLoading = true;
     notifyListeners();
@@ -159,7 +158,7 @@ class ServicesProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// تحميل الفئات من الخادم
+  /// تحميل الفئات من الخادم (GET /categories)
   Future<void> fetchCategories({String? token}) async {
     final catsJson = await ApiService.getCategories(token: token);
     if (catsJson == null) return;

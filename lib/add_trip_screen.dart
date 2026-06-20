@@ -1,5 +1,4 @@
 // ignore_for_file: unused_field
-import 'dart:convert';
 
 import 'package:daleel/api/location_service.dart';
 import 'package:daleel/providers/app_provider.dart';
@@ -8,9 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
-
+import 'package:daleel/api/api_service.dart';
 
 class AddTripScreen extends StatefulWidget {
   final String userName;
@@ -26,49 +24,43 @@ class AddTripScreen extends StatefulWidget {
 
 class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  
+
   // Page Controller
   int _currentStep = 0;
   late PageController _pageController;
   late AnimationController _progressController;
-  
+
   // Controllers للصفحة الأولى
   final TextEditingController _tripNameController = TextEditingController();
   final TextEditingController _placeNameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  
+
+  // الفئات (من الـ API)
+  List<Category> _availableCategories = [];
+  String? _selectedCategoryId;
+
   // Dropdown values
-  String? _selectedCategory;
   Governorate? _selectedGovernorate;
   City? _selectedCity;
   DateTime? _selectedDate;
-  
+
   // Location
   String? _currentLocation;
   double? _latitude;
   double? _longitude;
-  
+
   // Files
   final List<PlatformFile> _selectedFiles = [];
-  
+
   // الخطوات (الصفحة الثانية)
   final List<TripStep> _tripSteps = [];
-  
+
   // القوائم من API
   List<Governorate> _governorates = [];
   List<City> _cities = [];
   bool _isLoadingGovernorates = false;
   bool _isLoadingCities = false;
-  
-  // القوائم
-  final List<String> _categories = [
-    'الجيش',
-    'التخرج الجامعي',
-    'السفر للخارج',
-    'الزواج',
-    'ترخيص السيارات',
-    'أخرى',
-  ];
+  bool _isGettingLocation = false;
 
   @override
   void initState() {
@@ -78,76 +70,137 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _loadCategories();
     _loadGovernorates();
+    _checkLocationPermission();
   }
-  
-  /// جلب المحافظات من API
+
+  // ========== التحقق من أذونات الموقع مسبقاً ==========
+  Future<void> _checkLocationPermission() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+  }
+
+  // ========== تحميل الفئات ==========
+  Future<void> _loadCategories() async {
+    final provider = context.read<ServicesProvider>();
+    if (provider.categoriesList.isEmpty) {
+      final token = context.read<UserProvider>().user.token;
+      await provider.fetchCategories(token: token);
+    }
+    if (mounted) {
+      setState(() {
+        _availableCategories = provider.categoriesList;
+      });
+    }
+  }
+
+  // ========== تحميل المحافظات (مع Fallback) ==========
   Future<void> _loadGovernorates() async {
     if (!mounted) return;
     setState(() => _isLoadingGovernorates = true);
-    
+
     try {
       final governorates = await LocationService.getGovernorates();
       if (!mounted) return;
-      
-      print('🏛️ تم تحميل ${governorates.length} محافظة');
-      for (var gov in governorates) {
-        print('  - ${gov.id}: ${gov.name}');
-      }
-      
       setState(() {
         _governorates = governorates;
         _isLoadingGovernorates = false;
       });
+      if (governorates.isEmpty && mounted) {
+        _showSnackBar('تم تحميل المحافظات من القائمة الاحتياطية', isError: false);
+      }
     } catch (e) {
       if (!mounted) return;
-      
-      setState(() => _isLoadingGovernorates = false);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('فشل في تحميل المحافظات: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      final fallback = await LocationService.getGovernorates();
+      if (mounted) {
+        setState(() {
+          _governorates = fallback;
+          _isLoadingGovernorates = false;
+        });
+        _showSnackBar('تعذر الاتصال بالخادم، تم تحميل قائمة احتياطية', isError: true);
+      }
     }
   }
-  
-  /// جلب المدن عند اختيار محافظة
+
+  // ========== جلب المدن (مع Fallback) ==========
   Future<void> _loadCities(int governorateId) async {
     if (!mounted) return;
-    
+
     setState(() {
       _isLoadingCities = true;
-      _selectedCity = null; // إعادة تعيين المدينة المختارة
+      _selectedCity = null;
       _cities = [];
     });
-    
+
     try {
       final cities = await LocationService.getCities(governorateId);
       if (!mounted) return;
       
-      print('🏙️ تم تحميل ${cities.length} مدينة للمحافظة $governorateId');
-      for (var city in cities) {
-        print('  - ${city.id}: ${city.name}');
+      if (cities.isEmpty) {
+        setState(() {
+          _cities = _getFallbackCities(governorateId);
+          _isLoadingCities = false;
+        });
+        _showSnackBar('تم تحميل المدن من القائمة الاحتياطية', isError: false);
+      } else {
+        setState(() {
+          _cities = cities;
+          _isLoadingCities = false;
+        });
       }
-      
-      setState(() {
-        _cities = cities;
-        _isLoadingCities = false;
-      });
     } catch (e) {
       if (!mounted) return;
-      
-      setState(() => _isLoadingCities = false);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('فشل في تحميل المدن: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() {
+        _cities = _getFallbackCities(governorateId);
+        _isLoadingCities = false;
+      });
+      _showSnackBar('فشل تحميل المدن، تم استخدام قائمة احتياطية', isError: true);
     }
+  }
+
+  // ========== قائمة مدن احتياطية ==========
+  List<City> _getFallbackCities(int governorateId) {
+    final Map<int, List<String>> fallbackCities = {
+      1: ['القاهرة', 'العباسية', 'مدينة نصر', 'مصر الجديدة', 'المعادي', 'حلوان', 'الزمالك', 'جاردن سيتي'],
+      2: ['الإسكندرية', 'المنتزه', 'سيدي جابر', 'محرم بك', 'الأنفوشي', 'العجمي', 'برج العرب'],
+      3: ['بورسعيد', 'الشرق', 'الغرب', 'الضواحي'],
+      4: ['السويس', 'الأربعين', 'عتاقة', 'فيصل'],
+      5: ['دمياط', 'رأس البر', 'عزبة البرج', 'فارسكور'],
+      6: ['الدقهلية', 'المنصورة', 'طلخا', 'ميت غمر', 'أجا', 'دكرنس', 'شربين'],
+      7: ['الشرقية', 'الزقازيق', 'بلبيس', 'أبو كبير', 'ههيا', 'ديرب نجم', 'فاقوس', 'منيا القمح'],
+      8: ['القليوبية', 'بنها', 'شبرا الخيمة', 'قليوب', 'الخانكة', 'القناطر الخيرية'],
+      9: ['كفر الشيخ', 'بلطيم', 'مطوبس', 'سيدي سالم', 'دسوق'],
+      10: ['الغربية', 'طنطا', 'المحلة الكبرى', 'زفتى', 'بسيون', 'كفر الزيات'],
+      11: ['المنوفية', 'شبين الكوم', 'السادات', 'منوف', 'أشمون', 'الباجور'],
+      12: ['البحيرة', 'دمنهور', 'كفر الدوار', 'رشيد', 'إدفينا', 'حوش عيسى'],
+      13: ['الإسماعيلية', 'التل الكبير', 'القنطرة', 'فايد', 'أبو صوير'],
+      14: ['الجيزة', 'الهرم', 'الدقي', 'المهندسين', 'أكتوبر', 'الشيخ زايد', 'البدرشين', 'الصف'],
+      15: ['بني سويف', 'الواسطى', 'ناصر', 'إهناسيا', 'ببا', 'الفشن'],
+      16: ['الفيوم', 'سنورس', 'إطسا', 'يوسف الصديق', 'طامية'],
+      17: ['المنيا', 'مغاغة', 'بني مزار', 'مطاي', 'سمالوط', 'أبو قرقاص'],
+      18: ['أسيوط', 'ديروط', 'البداري', 'منفلوط', 'القوصية', 'أبنوب'],
+      19: ['سوهاج', 'أخميم', 'جرجا', 'المنشأة', 'طهطا', 'البلينا'],
+      20: ['قنا', 'نقادة', 'فرشوط', 'قفط', 'الوقف', 'أبو تشت'],
+      21: ['الأقصر', 'البياضية', 'الكرنك', 'إسنا', 'أرمنت', 'الطود'],
+      22: ['أسوان', 'إدفو', 'السباعية', 'كوم أمبو', 'نصر النوبة'],
+      23: ['البحر الأحمر', 'الغردقة', 'رأس غارب', 'سفاجا', 'القصير', 'مرسى علم'],
+      24: ['الوادي الجديد', 'الخارجة', 'الداخلة', 'الفرافرة', 'بلاط'],
+      25: ['مطروح', 'مرسى مطروح', 'الضبعة', 'العلمين', 'الحمام'],
+      26: ['شمال سيناء', 'العريش', 'الشيخ زويد', 'رفح'],
+      27: ['جنوب سيناء', 'الطور', 'نويبع', 'دهب', 'سانت كاترين', 'شرم الشيخ'],
+    };
+
+    final cities = fallbackCities[governorateId] ?? ['مدينة غير معروفة'];
+    return cities.map((name) => City(
+      id: cities.indexOf(name) + 1,
+      name: name,
+      governorateId: governorateId,
+    )).toList();
   }
 
   @override
@@ -166,16 +219,14 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
 
   Future<bool> _onWillPop() async {
     if (_currentStep == 1) {
-      // لو في الصفحة الثانية، ارجع للأولى
       _previousStep();
       return false;
     }
-    
-    // التحقق إذا كان المستخدم أدخل بيانات
+
     if (_tripNameController.text.isNotEmpty ||
         _placeNameController.text.isNotEmpty ||
         _descriptionController.text.isNotEmpty ||
-        _selectedCategory != null ||
+        _selectedCategoryId != null ||
         _selectedFiles.isNotEmpty ||
         _tripSteps.isNotEmpty) {
       return await _showExitDialog();
@@ -185,7 +236,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
 
   Future<bool> _showExitDialog() async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return await showDialog(
           context: context,
           barrierDismissible: false,
@@ -249,9 +300,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                             onPressed: () => Navigator.of(context).pop(false),
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              backgroundColor: isDark 
-                                  ? Colors.grey.shade800 
-                                  : Colors.grey.shade200,
+                              backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -301,9 +350,9 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
 
   void _nextStep() {
     if (_currentStep == 0) {
-      // التحقق من الصفحة الأولى
       if (!_formKey.currentState!.validate()) return;
-      if (_selectedCategory == null) {
+
+      if (_selectedCategoryId == null) {
         _showSnackBar('يرجى اختيار القسم', isError: true);
         return;
       }
@@ -319,8 +368,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
         _showSnackBar('يرجى اختيار التاريخ', isError: true);
         return;
       }
-      
-      // الانتقال للصفحة التانية
+
       setState(() {
         _currentStep = 1;
       });
@@ -352,7 +400,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
       _showSnackBar('لا يمكن إضافة أكثر من 10 خطوات', isError: true);
       return;
     }
-    
     setState(() {
       _tripSteps.add(TripStep(
         titleController: TextEditingController(),
@@ -399,11 +446,16 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     });
   }
 
+  // ========== الحصول على الموقع الحالي ==========
   Future<void> _getCurrentLocation() async {
+    if (_isGettingLocation) return;
+    setState(() => _isGettingLocation = true);
+
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        _showSnackBar('خدمة الموقع غير مفعلة', isError: true);
+        _showSnackBar('يرجى تشغيل خدمة الموقع من إعدادات الجهاز', isError: true);
+        setState(() => _isGettingLocation = false);
         return;
       }
 
@@ -411,28 +463,72 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          _showSnackBar('تم رفض إذن الموقع', isError: true);
+          _showSnackBar('تم رفض إذن الموقع، يرجى منح الإذن من إعدادات الجهاز', isError: true);
+          setState(() => _isGettingLocation = false);
           return;
         }
       }
 
-      Position position = await Geolocator.getCurrentPosition();
+      if (permission == LocationPermission.deniedForever) {
+        _showSnackBar('تم رفض إذن الموقع نهائياً، يرجى تعديل الإعدادات', isError: true);
+        setState(() => _isGettingLocation = false);
+        return;
+      }
+
+      _showSnackBar('جاري الحصول على الموقع...', isError: false);
+      
+      final Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 15),
+      );
+
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
       );
 
       if (placemarks.isNotEmpty) {
-        Placemark place = placemarks[0];
+        final Placemark place = placemarks[0];
+        String address = '';
+        List<String> parts = [];
+        if (place.street != null && place.street!.isNotEmpty) parts.add(place.street!);
+        if (place.subLocality != null && place.subLocality!.isNotEmpty) parts.add(place.subLocality!);
+        if (place.locality != null && place.locality!.isNotEmpty) parts.add(place.locality!);
+        if (place.administrativeArea != null && place.administrativeArea!.isNotEmpty) parts.add(place.administrativeArea!);
+        if (parts.isNotEmpty) {
+          address = parts.join(', ');
+        } else {
+          address = 'موقع حالي (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})';
+        }
+
         setState(() {
           _latitude = position.latitude;
           _longitude = position.longitude;
-          _currentLocation =
-              '${place.street}, ${place.subLocality}, ${place.locality}';
+          _currentLocation = address;
+          _isGettingLocation = false;
         });
+        
+        _showSnackBar('تم الحصول على الموقع بنجاح ✅', isError: false);
+      } else {
+        setState(() {
+          _latitude = position.latitude;
+          _longitude = position.longitude;
+          _currentLocation = 'موقع حالي (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})';
+          _isGettingLocation = false;
+        });
+        _showSnackBar('تم الحصول على الإحداثيات ولكن لم يتم العثور على عنوان', isError: true);
       }
     } catch (e) {
-      _showSnackBar('حدث خطأ أثناء الحصول على الموقع', isError: true);
+      setState(() => _isGettingLocation = false);
+      String errorMsg = 'حدث خطأ أثناء الحصول على الموقع';
+      if (e.toString().contains('PERMISSION_DENIED')) {
+        errorMsg = 'تم رفض إذن الموقع، يرجى منح الإذن من إعدادات الجهاز';
+      } else if (e.toString().contains('LOCATION_SERVICE_DISABLED')) {
+        errorMsg = 'خدمة الموقع غير مفعلة، يرجى تشغيلها من الإعدادات';
+      } else if (e.toString().contains('TIMEOUT')) {
+        errorMsg = 'انتهى وقت الانتظار، حاول مرة أخرى في مكان مكشوف';
+      }
+      _showSnackBar(errorMsg, isError: true);
     }
   }
 
@@ -503,46 +599,93 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     );
   }
 
- Future<void> _createService() async {
+  // ========== حفظ المشوار (باستخدام ApiService.createService) ==========
+  Future<void> _createService() async {
     if (_tripSteps.isEmpty) {
       _showSnackBar('يرجى إضافة خطوة واحدة على الأقل', isError: true);
       return;
     }
-    // تجهيز البيانات
-    final token = context.read<UserProvider>().user.token;
-    if (token == null) return;
 
-    final body = {
-      "title": _tripNameController.text,
-      "description": _descriptionController.text,
-      "category": _selectedCategory,
-      "author": widget.userName,
+    final token = context.read<UserProvider>().user.token;
+    print('🔑 Token in AddTripScreen: ${token != null ? token.substring(0, 20) : 'null'}...');
+
+    if (token == null || token.isEmpty) {
+      _showSnackBar('يرجى تسجيل الدخول أولاً', isError: true);
+      return;
+    }
+
+    final stepsList = _tripSteps.map((step) {
+      return {
+        'title': step.titleController.text.trim(),
+        'description': step.descriptionController.text.trim(),
+      };
+    }).toList();
+
+    final Map<String, dynamic> serviceData = {
+      'title': _tripNameController.text.trim(),
+      'name': _tripNameController.text.trim(),
+      'price': 0,
+      'description': _descriptionController.text.trim(),
+      'category_id': _selectedCategoryId,
+      'author': widget.userName,
+      'place_name': _placeNameController.text.trim(),
+      'governorate_id': _selectedGovernorate?.id,
+      'governorate_name': _selectedGovernorate?.name,
+      'city_id': _selectedCity?.id,
+      'city_name': _selectedCity?.name,
+      'date': _selectedDate?.toIso8601String(),
+      'location': _currentLocation,
+      'latitude': _latitude,
+      'longitude': _longitude,
+      'steps': stepsList,
+      'attachments': _selectedFiles.map((file) => file.name).toList(),
     };
 
-    try {
-      final url = Uri.parse('https://auth-login-for-daleel1.vercel.app/services');
-      final response = await http.post(url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: json.encode(body));
+    serviceData.removeWhere((key, value) =>
+        key != 'price' && (value == null || (value is String && value.isEmpty)));
 
-      if (response.statusCode == 201) {
-        final newServiceData = json.decode(response.body)['data'] ?? json.decode(response.body);
-        final newService = ServiceItem.fromJson(newServiceData);
-        // ignore: use_build_context_synchronously
+    try {
+      // ✅ استخدام ApiService.createService الذي يتعامل مع الكوكي و Bearer معاً
+      final newService = await ApiService.createService(
+        data: serviceData,
+        token: token,
+      );
+
+      if (!mounted) return;
+
+      if (newService != null) {
+        // إضافة إلى ServicesProvider
         context.read<ServicesProvider>().addServiceLocally(newService);
+        
+        // إضافة إلى TripsProvider
+        final trip = Trip(
+          id: newService.id,
+          title: newService.title,
+          date: _selectedDate != null
+              ? '${_selectedDate!.year}-${_selectedDate!.month}-${_selectedDate!.day}'
+              : '',
+          category: newService.category,
+          completedSteps: 0,
+          totalSteps: _tripSteps.length,
+          currentStep: _tripSteps.isNotEmpty ? _tripSteps[0].titleController.text : '',
+          placeName: _placeNameController.text.trim(),
+          description: _descriptionController.text.trim(),
+          governorate: _selectedGovernorate?.name,
+          city: _selectedCity?.name,
+          steps: _tripSteps.map((step) => TripStepData(
+            title: step.titleController.text.trim(),
+            description: step.descriptionController.text.trim(),
+          )).toList(),
+        );
+        context.read<TripsProvider>().addTrip(trip);
+
         _showSnackBar('تم إضافة المشوار بنجاح ✨');
-        // ignore: use_build_context_synchronously
         Navigator.pop(context);
       } else {
-        String errorMsg = 'فشل الإضافة';
-        try { errorMsg = json.decode(response.body)['message']; } catch (_) {}
-        _showSnackBar(errorMsg, isError: true);
+        _showSnackBar('فشل إضافة المشوار، حاول مرة أخرى', isError: true);
       }
     } catch (e) {
-      _showSnackBar('خطأ في الاتصال', isError: true);
+      _showSnackBar('حدث خطأ: $e', isError: true);
     }
   }
 
@@ -563,10 +706,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
           appBar: _buildAppBar(),
           body: Column(
             children: [
-              // Progress Indicator
               _buildProgressIndicator(),
-              
-              // Pages
               Expanded(
                 child: PageView(
                   controller: _pageController,
@@ -622,7 +762,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
 
   Widget _buildProgressIndicator() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: BoxDecoration(
@@ -637,7 +777,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
       ),
       child: Row(
         children: [
-          // Step 1
           Expanded(
             child: _buildStepIndicator(
               stepNumber: 1,
@@ -646,8 +785,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
               isCompleted: _currentStep > 0,
             ),
           ),
-          
-          // خط الربط
           Expanded(
             flex: 0,
             child: AnimatedBuilder(
@@ -660,12 +797,8 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        _currentStep > 0
-                            ? const Color(0xFF379777)
-                            : Colors.grey.shade300,
-                        _currentStep > 0
-                            ? const Color(0xFF379777)
-                            : Colors.grey.shade300,
+                        _currentStep > 0 ? const Color(0xFF379777) : Colors.grey.shade300,
+                        _currentStep > 0 ? const Color(0xFF379777) : Colors.grey.shade300,
                       ],
                       stops: [_progressController.value, _progressController.value],
                     ),
@@ -674,8 +807,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
               },
             ),
           ),
-          
-          // Step 2
           Expanded(
             child: _buildStepIndicator(
               stepNumber: 2,
@@ -696,7 +827,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     required bool isCompleted,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Column(
       children: [
         Container(
@@ -735,8 +866,8 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: isActive 
-                          ? Colors.white 
+                      color: isActive
+                          ? Colors.white
                           : (isDark ? Colors.grey.shade500 : Colors.grey.shade400),
                     ),
                   ),
@@ -785,16 +916,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                     const SizedBox(height: 20),
                     _buildSectionTitle('القسم'),
                     const SizedBox(height: 10),
-                    _buildDropdown(
-                      value: _selectedCategory,
-                      items: _categories,
-                      hint: 'اختر القسم',
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedCategory = value;
-                        });
-                      },
-                    ),
+                    _buildCategoryDropdown(),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -979,7 +1101,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
             ),
           ),
         ),
-        // زر التالي
         Positioned(
           bottom: 0,
           left: 0,
@@ -1041,7 +1162,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -1104,10 +1224,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                   ],
                 ),
               ),
-
               const SizedBox(height: 24),
-
-              // قائمة الخطوات
               if (_tripSteps.isEmpty)
                 _buildEmptyState()
               else
@@ -1119,18 +1236,12 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                     return _buildStepCard(index);
                   },
                 ),
-
               const SizedBox(height: 16),
-
-              // زر إضافة خطوة
               _buildAddStepButton(),
-
               const SizedBox(height: 24),
             ],
           ),
         ),
-
-        // زر حفظ المشوار
         Positioned(
           bottom: 0,
           left: 0,
@@ -1152,9 +1263,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () async {
-                  await _createService();
-                },
+                onPressed: _createService,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF379777),
                   foregroundColor: Colors.white,
@@ -1237,7 +1346,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
   Widget _buildStepCard(int index) {
     final step = _tripSteps[index];
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -1249,9 +1358,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
         ),
         boxShadow: [
           BoxShadow(
-            color: isDark 
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.04),
+            color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1259,7 +1366,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
       ),
       child: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1310,8 +1416,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
               ],
             ),
           ),
-
-          // Content
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -1333,9 +1437,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                       fontSize: 14,
                     ),
                     filled: true,
-                    fillColor: isDark 
-                        ? Colors.grey.shade900.withOpacity(0.3)
-                        : Colors.grey.shade50,
+                    fillColor: isDark ? Colors.grey.shade900.withOpacity(0.3) : Colors.grey.shade50,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 14,
@@ -1450,7 +1552,121 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     );
   }
 
-  
+  // ========== الفئات ==========
+  Widget _buildCategoryDropdown() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (_availableCategories.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(12.0),
+          child: CircularProgressIndicator(
+            color: Color(0xFF379777),
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            isDark ? Colors.grey.shade900.withOpacity(0.3) : Colors.grey.shade50,
+            isDark ? Colors.grey.shade900.withOpacity(0.2) : const Color(0xFFF8F9FA),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: _selectedCategoryId != null
+              ? const Color(0xFF379777)
+              : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+          width: _selectedCategoryId != null ? 1.5 : 1,
+        ),
+      ),
+      child: DropdownButtonFormField<String>(
+        value: _selectedCategoryId,
+        items: _availableCategories.map((category) {
+          return DropdownMenuItem(
+            value: category.id,
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    category.name,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF379777),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          setState(() {
+            _selectedCategoryId = value;
+          });
+        },
+        hint: Text(
+          'اختر القسم',
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+          ),
+        ),
+        dropdownColor: Theme.of(context).cardColor,
+        menuMaxHeight: 300,
+        icon: Container(
+          padding: const EdgeInsets.only(right: 12, left: 4),
+          child: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFF379777),
+            size: 20,
+          ),
+        ),
+        decoration: const InputDecoration(
+          filled: false,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 16,
+          ),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
+        isExpanded: true,
+        style: TextStyle(
+          color: Theme.of(context).textTheme.bodyLarge?.color,
+          fontSize: 15,
+          fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
@@ -1469,7 +1685,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     required List<Widget> children,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1481,9 +1697,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
         ),
         boxShadow: [
           BoxShadow(
-            color: isDark 
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.04),
+            color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1541,7 +1755,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     bool required = true,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
@@ -1557,9 +1771,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
           fontSize: 14,
         ),
         filled: true,
-        fillColor: isDark 
-            ? Colors.grey.shade900.withOpacity(0.3)
-            : Colors.grey.shade50,
+        fillColor: isDark ? Colors.grey.shade900.withOpacity(0.3) : Colors.grey.shade50,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 15,
@@ -1585,131 +1797,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     );
   }
 
-  Widget _buildDropdown({
-    required String? value,
-    required List<String> items,
-    required String hint,
-    required ValueChanged<String?> onChanged,
-    bool enabled = true,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: [
-            isDark 
-                ? Colors.grey.shade900.withOpacity(0.3)
-                : Colors.grey.shade50,
-            isDark
-                ? Colors.grey.shade900.withOpacity(0.2)
-                : const Color(0xFFF8F9FA),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-          color: value != null 
-              ? const Color(0xFF379777)
-              : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
-          width: value != null ? 1.5 : 1,
-        ),
-      ),
-      child: DropdownButtonFormField<String>(
-        value: value,
-        items: items.map((item) {
-          return DropdownMenuItem(
-            value: item,
-            alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  item,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
-                  ),
-                ),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF379777),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-        selectedItemBuilder: (BuildContext context) {
-          return items.map<Widget>((String item) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  item,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF379777),
-                    fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
-                  ),
-                ),
-              ],
-            );
-          }).toList();
-        },
-        onChanged: enabled ? onChanged : null,
-        hint: Text(
-          hint,
-          textAlign: TextAlign.right,
-          style: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
-          ),
-        ),
-        dropdownColor: Theme.of(context).cardColor,
-        menuMaxHeight: 300,
-        icon: Container(
-          padding: const EdgeInsets.only(
-            right: 12,
-            left: 4,
-          ),
-          child: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: Color(0xFF379777),
-            size: 20,
-          ),
-        ),
-        decoration: const InputDecoration(
-          filled: false,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 18,
-            vertical: 16,
-          ),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
-        isExpanded: true,
-        style: TextStyle(
-          color: Theme.of(context).textTheme.bodyLarge?.color,
-          fontSize: 15,
-          fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
-        ),
-      ),
-    );
-  }
-  
   Widget _buildGovernorateDropdown({
     required Governorate? value,
     required List<Governorate> items,
@@ -1717,26 +1804,20 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     required ValueChanged<Governorate?> onChanged,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           colors: [
-            isDark 
-                ? Colors.grey.shade900.withOpacity(0.3)
-                : Colors.grey.shade50,
-            isDark
-                ? Colors.grey.shade900.withOpacity(0.2)
-                : const Color(0xFFF8F9FA),
+            isDark ? Colors.grey.shade900.withOpacity(0.3) : Colors.grey.shade50,
+            isDark ? Colors.grey.shade900.withOpacity(0.2) : const Color(0xFFF8F9FA),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         border: Border.all(
-          color: value != null 
-              ? const Color(0xFF379777)
-              : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+          color: value != null ? const Color(0xFF379777) : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
           width: value != null ? 1.5 : 1,
         ),
       ),
@@ -1749,14 +1830,18 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Text(
-                  governorate.name,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+                Flexible(
+                  child: Text(
+                    governorate.name,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1783,25 +1868,6 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
             fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
           ),
         ),
-        selectedItemBuilder: (BuildContext context) {
-          return items.map<Widget>((Governorate governorate) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  governorate.name,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF379777),
-                    fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
-                  ),
-                ),
-              ],
-            );
-          }).toList();
-        },
         dropdownColor: Theme.of(context).cardColor,
         menuMaxHeight: 300,
         icon: _isLoadingGovernorates
@@ -1837,7 +1903,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
       ),
     );
   }
-  
+
   Widget _buildCityDropdown({
     required City? value,
     required List<City> items,
@@ -1846,13 +1912,13 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     bool enabled = true,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           colors: [
-            isDark 
+            isDark
                 ? Colors.grey.shade900.withOpacity(enabled ? 0.3 : 0.15)
                 : (enabled ? Colors.grey.shade50 : Colors.grey.shade100),
             isDark
@@ -1872,39 +1938,24 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Text(
-                  city.name,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+                Flexible(
+                  child: Text(
+                    city.name,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+                    ),
                   ),
                 ),
               ],
             ),
           );
         }).toList(),
-        selectedItemBuilder: (BuildContext context) {
-          return items.map<Widget>((City city) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  city.name,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF379777),
-                    fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
-                  ),
-                ),
-              ],
-            );
-          }).toList();
-        },
         onChanged: enabled ? onChanged : null,
         hint: Text(
           hint,
@@ -1918,7 +1969,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
         ),
         dropdownColor: Theme.of(context).cardColor,
         menuMaxHeight: 300,
- icon: _isLoadingCities
+        icon: _isLoadingCities
             ? const SizedBox(
                 width: 18,
                 height: 18,
@@ -1955,15 +2006,13 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
 
   Widget _buildDateField() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return InkWell(
       onTap: _selectDate,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: isDark 
-              ? Colors.grey.shade900.withOpacity(0.3)
-              : Colors.grey.shade50,
+          color: isDark ? Colors.grey.shade900.withOpacity(0.3) : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
@@ -1978,7 +2027,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                   : 'اختر التاريخ',
               style: TextStyle(
                 fontSize: 16,
-                color: _selectedDate != null 
+                color: _selectedDate != null
                     ? Theme.of(context).textTheme.bodyLarge?.color
                     : Colors.grey.shade500,
               ),
@@ -1991,17 +2040,16 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
     );
   }
 
+  // ========== حقل الموقع الحالي ==========
   Widget _buildLocationField() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return InkWell(
-      onTap: _getCurrentLocation,
+      onTap: _isGettingLocation ? null : _getCurrentLocation,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         decoration: BoxDecoration(
-          color: isDark 
-              ? Colors.grey.shade900.withOpacity(0.3)
-              : Colors.grey.shade50,
+          color: isDark ? Colors.grey.shade900.withOpacity(0.3) : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
@@ -2010,6 +2058,22 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
+            if (_isGettingLocation)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFF379777),
+                ),
+              )
+            else
+              const Icon(
+                Icons.location_on,
+                color: Color(0xFF379777),
+                size: 20,
+              ),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
                 _currentLocation ?? 'اضغط للحصول على الموقع الحالي',
@@ -2018,14 +2082,12 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   fontSize: 14,
-                  color: _currentLocation != null 
+                  color: _currentLocation != null
                       ? Theme.of(context).textTheme.bodyLarge?.color
                       : Colors.grey.shade500,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            const Icon(Icons.location_on, color: Color(0xFF379777), size: 20),
           ],
         ),
       ),
@@ -2034,7 +2096,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
 
   Widget _buildFilesSection() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -2049,9 +2111,7 @@ class _AddTripScreenState extends State<AddTripScreen> with TickerProviderStateM
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isDark 
-                      ? Colors.grey.shade900.withOpacity(0.3)
-                      : Colors.grey.shade50,
+                  color: isDark ? Colors.grey.shade900.withOpacity(0.3) : Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
