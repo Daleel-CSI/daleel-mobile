@@ -54,6 +54,31 @@ class ApiService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>?> getPopularServices({String? token}) async {
+    try {
+      final uri = Uri.parse('$baseUrl/services/popular');
+      final headers = _buildHeaders(token);
+      final response = await http.get(uri, headers: headers);
+      debugPrint('🔹 GET /services/popular -> ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) {
+          return data.cast<Map<String, dynamic>>();
+        } else if (data is Map && data['data'] is List) {
+          return (data['data'] as List).cast<Map<String, dynamic>>();
+        } else if (data is Map && data['services'] != null) {
+          return (data['services'] as List).cast<Map<String, dynamic>>();
+        } else if (data is Map && data['popular'] != null) {
+          return (data['popular'] as List).cast<Map<String, dynamic>>();
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Get popular services error: $e');
+      return null;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>?> getPendingServices({String? token}) async {
     try {
       final uri = Uri.parse('$baseUrl/services/pending');

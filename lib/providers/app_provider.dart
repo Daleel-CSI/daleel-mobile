@@ -1,3 +1,4 @@
+import 'package:daleel/categorie_icons.dart';
 import 'package:flutter/foundation.dart';
 import 'package:daleel/api/api_service.dart';
 
@@ -115,7 +116,10 @@ class Category {
     return Category(
       id: id,
       name: json['name'] ?? json['category_name'] ?? id,
-      iconPath: json['icon'] ?? '',
+      // ✅ السيرفر لا يرجع حقل icon فعلياً (تأكدنا من الاستجابة الحقيقية)
+      // لذلك نستخدم mapping محلي ثابت بناءً على category_id
+      // مع fallback تلقائي لأي فئة غير معرّفة في الخريطة
+      iconPath: CategoryIcons.resolve(id),
     );
   }
 }

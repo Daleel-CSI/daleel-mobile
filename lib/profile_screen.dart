@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:daleel/account_screen.dart';
 import 'package:daleel/help_about_bottom_sheets.dart';
-import 'package:daleel/providers/theme_provider.dart';
 import 'package:daleel/providers/user_provider.dart';
 import 'package:daleel/settings_screen.dart';
 import 'package:daleel/screen/auth/auth_screen.dart';
@@ -11,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -169,13 +167,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           ),
           const SizedBox(height: 12),
-          _buildToggleMenuItem(
-            title: 'الوضع الليلي',
-            iconPath: 'assets/icons/moon-eclipse.svg',
-            value: context.watch<ThemeProvider>().isDarkMode,
-            onChanged: (value) => context.read<ThemeProvider>().toggleTheme(),
-          ),
-          const SizedBox(height: 12),
           _buildMenuItem(
             title: 'المساعدة',
             iconPath: 'assets/icons/help-circle.svg',
@@ -232,48 +223,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       colorFilter: ColorFilter.mode(
                           isLogout ? Colors.red.shade600 : const Color(0xFF379777),
                           BlendMode.srcIn)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleMenuItem({
-    required String title,
-    required String iconPath,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return _AnimatedCard(
-      onTap: null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Switch(
-                value: value,
-                onChanged: onChanged,
-                activeColor: const Color(0xFF379777),
-                activeTrackColor: const Color(0xFFB2E4D0)),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).textTheme.bodyLarge?.color)),
-                  const SizedBox(width: 12),
-                  SvgPicture.asset(iconPath,
-                      width: 24,
-                      height: 24,
-                      colorFilter: const ColorFilter.mode(
-                          Color(0xFF379777), BlendMode.srcIn)),
                 ],
               ),
             ),
@@ -533,9 +482,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       } catch (_) {}
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    if (mounted) context.read<UserProvider>().clearUser();
+    if (mounted) await context.read<UserProvider>().clearUser();
     final GoogleSignIn googleSignIn = GoogleSignIn();
     await googleSignIn.signOut();
     if (mounted) {

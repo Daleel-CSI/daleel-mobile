@@ -1,3 +1,4 @@
+import 'package:daleel/all_categories_screen.dart';
 import 'package:daleel/add_trip_screen.dart';
 import 'package:daleel/profile_screen.dart';
 import 'package:daleel/providers/user_provider.dart';
@@ -10,6 +11,7 @@ import 'package:daleel/category_services_screen.dart';
 import 'package:daleel/notifications_screen.dart';
 import 'package:daleel/ai_chat_screen.dart';
 import 'package:daleel/service_details_screen.dart';
+import 'package:daleel/api/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
@@ -29,38 +31,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   int _selectedBottomIndex = 0;
   int _unreadNotificationsCount = 3;
 
-  int completedSteps = 5;
-  int totalSteps = 5;
-
-  final List<PopularService> _popularServices = [
-    PopularService(
-      id: 'popular_1',
-      title: "شراء سيارة جديدة بالتقسيط",
-      rating: 4.8,
-      reviewCount: 10000,
-      location: "بواسطة عمر وحيد",
-      source: "مصدر موثوق",
-      isFeatured: true,
-    ),
-    PopularService(
-      id: 'popular_2',
-      title: "شراء سيارة جديدة بالتقسيط",
-      rating: 4.8,
-      reviewCount: 10000,
-      location: "بواسطة عمر وحيد",
-      source: "مصدر موثوق",
-      isFeatured: true,
-    ),
-    PopularService(
-      id: 'popular_3',
-      title: "شراء سيارة جديدة بالتقسيط",
-      rating: 4.8,
-      reviewCount: 10000,
-      location: "بواسطة عمر وحيد",
-      source: "مصدر موثوق",
-      isFeatured: true,
-    ),
-  ];
+  List<ServiceItem> _popularServices = [];
+  bool _isLoadingPopular = false;
+  String? _popularError;
 
   @override
   void initState() {
@@ -79,6 +52,32 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         debugPrint('❌ Error loading services in HomePage: $e');
       }
     });
+    _fetchPopularServices();
+  }
+
+  Future<void> _fetchPopularServices() async {
+    final token = context.read<UserProvider>().user.token;
+    setState(() {
+      _isLoadingPopular = true;
+      _popularError = null;
+    });
+
+    final popularJson = await ApiService.getPopularServices(token: token);
+
+    if (!mounted) return;
+
+    if (popularJson != null) {
+      setState(() {
+        _popularServices =
+            popularJson.map((json) => ServiceItem.fromJson(json)).toList();
+        _isLoadingPopular = false;
+      });
+    } else {
+      setState(() {
+        _popularError = 'فشل تحميل الخدمات الأكثر شيوعاً';
+        _isLoadingPopular = false;
+      });
+    }
   }
 
   @override
@@ -352,6 +351,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildTripsSection(String userName) {
+    final trips = context.watch<TripsProvider>().trips;
+    final hasTrip = trips.isNotEmpty;
+    final latestTrip = hasTrip ? trips.first : null;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -381,106 +384,158 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: 20),
-          _AnimatedCard(
-            onTap: () {},
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          hasTrip
+              ? _buildTripCard(latestTrip!)
+              : _buildNoTripCard(userName),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoTripCard(String userName) {
+    return _AnimatedCard(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AddTripScreen(userName: userName),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(Icons.map_outlined, size: 40, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              'لا توجد مشاوير حالياً',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'اضغط على "اضافة مشوار" لبدء أول مشوار لك',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTripCard(Trip trip) {
+    final totalSteps = trip.totalSteps > 0 ? trip.totalSteps : 1;
+    final completedSteps = trip.completedSteps.clamp(0, totalSteps);
+
+    return _AnimatedCard(
+      onTap: () {},
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                SizedBox(
+                  width: 70,
+                  height: 70,
+                  child: Stack(
                     children: [
-                      SizedBox(
-                        width: 70,
-                        height: 70,
-                        child: Stack(
-                          children: [
-                            Center(
-                              child: SizedBox(
-                                width: 70,
-                                height: 70,
-                                child: CircularProgressIndicator(
-                                  value: completedSteps / totalSteps,
-                                  strokeWidth: 6,
-                                  backgroundColor: const Color(0xFFE8F5E9),
-                                  valueColor:
-                                      const AlwaysStoppedAnimation<Color>(
-                                          Color(0xFF379777)),
-                                ),
-                              ),
-                            ),
-                            Center(
-                              child: Text(
-                                '$completedSteps/$totalSteps',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF379777),
-                                ),
-                              ),
-                            ),
-                          ],
+                      Center(
+                        child: SizedBox(
+                          width: 70,
+                          height: 70,
+                          child: CircularProgressIndicator(
+                            value: completedSteps / totalSteps,
+                            strokeWidth: 6,
+                            backgroundColor: const Color(0xFFE8F5E9),
+                            valueColor:
+                                const AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF379777)),
+                          ),
                         ),
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            'مسوغات العمل',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.color,
-                            ),
+                      Center(
+                        child: Text(
+                          '$completedSteps/$totalSteps',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF379777),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'اليوم الأربعاء 5 مايو',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade500),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? const Color(0xFF2A2A2A)
-                          : const Color(0xFFF8F8F8),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '٥. بيريت التأمينات - مكتب التأمينات',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.color
-                                  ?.withOpacity(0.7),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                ),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        trip.title,
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodyLarge
+                              ?.color,
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        trip.date.isNotEmpty ? trip.date : trip.placeName,
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade500),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ],
+            if (trip.currentStep.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF2A2A2A)
+                      : const Color(0xFFF8F8F8),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        trip.currentStep,
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodyLarge
+                              ?.color
+                              ?.withOpacity(0.7),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -495,13 +550,33 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            'اكتشف مشاوير جديدة',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).textTheme.bodyLarge?.color,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (categories.isNotEmpty)
+                _AnimatedButton(
+                  text: 'اظهار الكل',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            AllCategoriesScreen(userName: userName),
+                      ),
+                    );
+                  },
+                )
+              else
+                const SizedBox.shrink(),
+              Text(
+                'اكتشف مشاوير جديدة',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           if (categories.isEmpty)
@@ -631,20 +706,59 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: 16),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _popularServices.length,
-            itemBuilder: (context, index) {
-              return _buildPopularServiceCard(_popularServices[index]);
-            },
-          ),
+          _isLoadingPopular
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: CircularProgressIndicator(color: Color(0xFF379777)),
+                  ),
+                )
+              : _popularError != null
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Text(_popularError!,
+                                style: TextStyle(color: Colors.grey.shade600)),
+                          ),
+                          ElevatedButton(
+                            onPressed: _fetchPopularServices,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF379777),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text('إعادة المحاولة',
+                                style: TextStyle(color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _popularServices.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Text('لا توجد خدمات شائعة حالياً',
+                                style: TextStyle(color: Colors.grey.shade600)),
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _popularServices.length,
+                          itemBuilder: (context, index) {
+                            return _buildPopularServiceCard(_popularServices[index]);
+                          },
+                        ),
         ],
       ),
     );
   }
 
-  Widget _buildPopularServiceCard(PopularService service) {
+  Widget _buildPopularServiceCard(ServiceItem service) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return _AnimatedCard(
@@ -654,7 +768,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           MaterialPageRoute(
             builder: (context) => ServiceDetailsScreen(
               serviceTitle: service.title,
-              serviceDescription: service.location,
+              serviceDescription: service.description,
               steps: ServiceDetailsData.getStepsForService(service.title),
               comments: ServiceDetailsData.getMockComments(),
               serviceId: service.id,
@@ -729,7 +843,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 Row(
                   children: [
                     Text(
-                      service.location,
+                      'بواسطة ${service.author}',
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade700),
                     ),
@@ -1012,24 +1126,4 @@ class _ClickableServiceCardState extends State<_ClickableServiceCard> {
       ),
     );
   }
-}
-
-class PopularService {
-  final String id;
-  final String title;
-  final double rating;
-  final int reviewCount;
-  final String location;
-  final String source;
-  final bool isFeatured;
-
-  PopularService({
-    required this.id,
-    required this.title,
-    required this.rating,
-    required this.reviewCount,
-    required this.location,
-    required this.source,
-    this.isFeatured = false,
-  });
 }

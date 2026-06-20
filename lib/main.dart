@@ -9,6 +9,7 @@ import 'package:daleel/screen/slpashes/splash_1.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +39,20 @@ class _MyAppState extends State<MyApp> {
   // ✅ تخزين الـ future لمنع إنشاء future جديد عند كل rebuild
   Future<Widget>? _navigationFuture;
   String? _cachedToken;
+  // ✅ تخزين نتيجة فحص "هل شاف المستخدم الـ onboarding قبل كده"
+  // عشان منوريهوش الـ splash/onboarding تاني بعد تسجيل الخروج
+  Future<bool>? _seenOnboardingFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _seenOnboardingFuture = _checkSeenOnboarding();
+  }
+
+  Future<bool> _checkSeenOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('seenOnboarding') ?? false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,11 +97,26 @@ class _MyAppState extends State<MyApp> {
                 );
               }
 
-              // لا يوجد توكن => شاشة البداية (Splash1)
+              // لا يوجد توكن => نتأكد الأول هل المستخدم شاف الـ onboarding قبل كده
               // ✅ إعادة تعيين الـ cache عند تسجيل الخروج
               _cachedToken = null;
               _navigationFuture = null;
-              return const Splash1();
+              return FutureBuilder<bool>(
+                future: _seenOnboardingFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Scaffold(
+                      body: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final seenOnboarding = snapshot.data ?? false;
+                  // ✅ شاف الـ onboarding قبل كده (مثلاً بعد تسجيل خروج) => يروح لشاشة تسجيل الدخول مباشرة
+                  // ✅ أول مرة يفتح فيها التطبيق => يشوف الـ splash والـ onboarding
+                  return seenOnboarding
+                      ? const AuthScreen(startWithLogin: true)
+                      : const Splash1();
+                },
+              );
             },
           ),
         );

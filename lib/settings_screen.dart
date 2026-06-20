@@ -39,19 +39,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final userProvider = context.read<UserProvider>();
     final token = userProvider.token;
 
-    final settings = await ApiService.getSettings(token: token);
+    final raw = await ApiService.getSettings(token: token);
     if (!mounted) return;
 
-    if (settings != null) {
-      final notifEnabled = settings['notificationsEnabled'];
-      if (notifEnabled != null && notifEnabled is bool) {
-        _notificationsEnabled = notifEnabled;
+    if (raw != null) {
+      debugPrint('⚙️ GET /settings response: $raw');
+
+      // ✅ بعض الاستجابات بتيجي ملفوفة جوه "data" - نفكها لو موجودة
+      final settings = (raw['data'] is Map)
+          ? Map<String, dynamic>.from(raw['data'] as Map)
+          : raw;
+
+      // ✅ الإشعارات: نجرب أكتر من اسم محتمل للحقل
+      final notifValue = settings['notificationsEnabled'] ??
+          settings['notifications'] ??
+          settings['notification_enabled'];
+      if (notifValue is bool) {
+        _notificationsEnabled = notifValue;
       }
-      final theme = settings['theme'];
-      final isDark = (theme == 'dark');
-      final themeProvider = context.read<ThemeProvider>();
-      if (isDark != themeProvider.isDarkMode) {
-        themeProvider.toggleTheme();
+
+      // ✅ الثيم: نجرب أكتر من شكل محتمل (نص "dark"/"light" أو boolean)
+      bool? serverIsDark;
+      final themeField = settings['theme'];
+      if (themeField is String) {
+        serverIsDark = themeField.toLowerCase() == 'dark';
+      } else if (settings['dark_mode'] is bool) {
+        serverIsDark = settings['dark_mode'] as bool;
+      } else if (settings['darkMode'] is bool) {
+        serverIsDark = settings['darkMode'] as bool;
+      } else if (settings['isDarkMode'] is bool) {
+        serverIsDark = settings['isDarkMode'] as bool;
+      }
+
+      // ✅ المهم: لو مقدرناش نفهم قيمة الثيم من السيرفر، منلمسش الثيم المحلي خالص
+      // (ده اللي كان بيسبب رجوع الثيم لفاتح لوحده عند فتح صفحة الإعدادات)
+      if (serverIsDark != null) {
+        final themeProvider = context.read<ThemeProvider>();
+        if (serverIsDark != themeProvider.isDarkMode) {
+          themeProvider.toggleTheme();
+        }
       }
     }
 

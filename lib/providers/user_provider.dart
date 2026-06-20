@@ -126,7 +126,15 @@ class UserProvider extends ChangeNotifier {
   Future<void> clearUser() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      // ✅ نمسح بيانات المستخدم بس، ومنمسحش إعدادات التطبيق
+      // زي seenOnboarding أو isDarkMode عشان متترجعش onboarding
+      // أو الثيم لوضعهم الافتراضي بعد تسجيل الخروج
+      await prefs.remove('auth_token');
+      await prefs.remove('auth_cookie');
+      await prefs.remove('display_name');
+      await prefs.remove('email');
+      await prefs.remove('photo_url');
+      await prefs.remove('phone');
       _user = User();
       notifyListeners();
       debugPrint('🗑️ User cleared');
