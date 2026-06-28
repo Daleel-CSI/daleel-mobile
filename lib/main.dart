@@ -155,8 +155,10 @@ class _MyAppState extends State<MyApp> {
         final userData = data['user'] ?? data;
 
         if (userData is Map<String, dynamic>) {
+          final userMetadata = userData['user_metadata'];
           final user = User(
-            displayName: userData['username'] ??
+            displayName: (userMetadata is Map ? userMetadata['username'] : null) ??
+                userData['username'] ??
                 userData['name'] ??
                 userData['email'],
             email: userData['email'],

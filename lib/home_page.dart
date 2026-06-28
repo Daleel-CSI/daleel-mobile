@@ -1,9 +1,7 @@
 import 'package:daleel/all_categories_screen.dart';
-import 'package:daleel/add_trip_screen.dart';
 import 'package:daleel/profile_screen.dart';
 import 'package:daleel/providers/user_provider.dart';
 import 'package:daleel/providers/app_provider.dart';
-import 'package:daleel/save_screen.dart';
 import 'package:daleel/discover_screen.dart';
 import 'package:daleel/search_results_screen.dart';
 import 'package:daleel/popular_services_screen.dart';
@@ -17,7 +15,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool showWelcome;
+  final String? welcomeName;
+
+  const HomePage({super.key, this.showWelcome = false, this.welcomeName});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -29,7 +30,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final FocusNode _searchFocusNode = FocusNode();
 
   int _selectedBottomIndex = 0;
-  int _unreadNotificationsCount = 3;
+  int _unreadNotificationsCount = 0;
 
   List<ServiceItem> _popularServices = [];
   bool _isLoadingPopular = false;
@@ -38,6 +39,38 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    if (widget.showWelcome) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.waving_hand_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'أهلاً بك يا ${widget.welcomeName}! 🎉',
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    textDirection: TextDirection.rtl,
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF379777),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      });
+    }
     Future.microtask(() async {
       // ignore: use_build_context_synchronously
       final token = context.read<UserProvider>().user.token;
@@ -134,7 +167,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   )
                 : _buildHomeContent(userName),
-            const SaveScreen(),
             DiscoverScreen(userName: userName),
             const ProfileScreen(),
           ],
@@ -159,8 +191,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  _buildTripsSection(userName),
-                  const SizedBox(height: 30),
                   _buildDiscoverSection(userName),
                   const SizedBox(height: 30),
                   _buildPopularSection(),
@@ -345,196 +375,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTripsSection(String userName) {
-    final trips = context.watch<TripsProvider>().trips;
-    final hasTrip = trips.isNotEmpty;
-    final latestTrip = hasTrip ? trips.first : null;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _AnimatedButton(
-                text: 'اضافة مشوار',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => AddTripScreen(userName: userName),
-                    ),
-                  );
-                },
-              ),
-              Text(
-                'مشاويري',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).textTheme.bodyLarge?.color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          hasTrip
-              ? _buildTripCard(latestTrip!)
-              : _buildNoTripCard(userName),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoTripCard(String userName) {
-    return _AnimatedCard(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AddTripScreen(userName: userName),
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(Icons.map_outlined, size: 40, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text(
-              'لا توجد مشاوير حالياً',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).textTheme.bodyLarge?.color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'اضغط على "اضافة مشوار" لبدء أول مشوار لك',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTripCard(Trip trip) {
-    final totalSteps = trip.totalSteps > 0 ? trip.totalSteps : 1;
-    final completedSteps = trip.completedSteps.clamp(0, totalSteps);
-
-    return _AnimatedCard(
-      onTap: () {},
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                SizedBox(
-                  width: 70,
-                  height: 70,
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: SizedBox(
-                          width: 70,
-                          height: 70,
-                          child: CircularProgressIndicator(
-                            value: completedSteps / totalSteps,
-                            strokeWidth: 6,
-                            backgroundColor: const Color(0xFFE8F5E9),
-                            valueColor:
-                                const AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF379777)),
-                          ),
-                        ),
-                      ),
-                      Center(
-                        child: Text(
-                          '$completedSteps/$totalSteps',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF379777),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        trip.title,
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.color,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        trip.date.isNotEmpty ? trip.date : trip.placeName,
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade500),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (trip.currentStep.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF2A2A2A)
-                      : const Color(0xFFF8F8F8),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        trip.currentStep,
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.color
-                              ?.withOpacity(0.7),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
         ),
       ),
     );
@@ -889,10 +729,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem('assets/icons/profile.svg', 'ملفي', 3),
+              _buildNavItem('assets/icons/profile.svg', 'ملفي', 2),
               _buildNavItem(
-                  'assets/icons/Property 1=Component 2.svg', 'اكتشف', 2),
-              _buildNavItem('assets/icons/Bookmark.svg', 'مشاويري', 1),
+                  'assets/icons/Property 1=Component 2.svg', 'اكتشف', 1),
               _buildNavItem('assets/icons/home.svg', 'الرئيسية', 0),
             ],
           ),

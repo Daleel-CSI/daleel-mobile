@@ -458,32 +458,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   // Mock Data
   List<NotificationItem> _getInitialNotifications() {
-    return [
-      NotificationItem(
-        id: '3',
-        type: NotificationType.like,
-        title: 'أُعجبكس أعجب بمنشوارك',
-        subtitle: null,
-        time: 'ساعات\nأمس',
-        isRead: false,
-      ),
-      NotificationItem(
-        id: '4',
-        type: NotificationType.system,
-        title: 'الملحق الأسبوعي',
-        subtitle: null,
-        time: 'أمس\nمدن',
-        isRead: true,
-      ),
-      NotificationItem(
-        id: '5',
-        type: NotificationType.comment,
-        title: 'ماركوس علق',
-        subtitle: '"بدو مدهش!!!"',
-        time: 'أمس',
-        isRead: true,
-      ),
-    ];
+    return [];
   }
 }
 

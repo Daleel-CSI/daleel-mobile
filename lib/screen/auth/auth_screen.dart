@@ -339,7 +339,9 @@ class _LoginContentState extends State<_LoginContent> {
 
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
+          MaterialPageRoute(
+            builder: (_) => HomePage(showWelcome: true, welcomeName: displayName ?? emailUser?.split('@').first ?? 'مستخدم'),
+          ),
         );
       } else {
         String errorMsg = 'فشل تسجيل الدخول';
